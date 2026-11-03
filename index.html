@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#15382b" />
+    <meta
+      name="description"
+      content="Pull up a stool on Harbor Syndicate. Trade street plots, bargain with neighbors, open neighborhood shops, and put $GOLD to work in a six-year trading board game."
+    />
+    <meta name="application-name" content="Harbor Tycoon" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Harbor Tycoon" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>Harbor Tycoon · Build with $GOLD on Harbor Syndicate</title>
+    <link rel="canonical" href="https://harbor-tycoon-production.up.railway.app/" />
+    <link rel="vcs-git" href="https://github.com/harrymove-ctrl/harbor-tycoon" />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title="Harbor Tycoon Changelog (RSS 2.0)"
+      href="https://harbor-tycoon-production.up.railway.app/changelog.xml"
+    />
+    <link
+      rel="alternate"
+      type="application/atom+xml"
+      title="Harbor Tycoon Changelog (Atom 1.0)"
+      href="https://harbor-tycoon-production.up.railway.app/atom.xml"
+    />
+    <link
+      rel="alternate"
+      type="application/feed+json"
+      title="Harbor Tycoon Release Feed (JSON)"
+      href="https://harbor-tycoon-production.up.railway.app/feed.json"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Harbor Tycoon" />
+    <meta property="og:url" content="https://harbor-tycoon-production.up.railway.app/" />
+    <meta property="og:title" content="Harbor Tycoon · Pull up a stool &amp; build with $GOLD" />
+    <meta
+      property="og:description"
+      content="Make a deal. Open a shop. Put $GOLD to work across six years on AI Merchant Engine."
+    />
+    <meta
+      property="og:image"
+      content="https://harbor-tycoon-production.up.railway.app/assets/saigon/saigon-town-og-v8.png?v=v13"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Harbor Tycoon · Pull up a stool &amp; build with $GOLD" />
+    <meta
+      name="twitter:description"
+      content="Make a deal. Open a shop. Put $GOLD to work across six years on AI Merchant Engine."
+    />
+    <meta
+      name="twitter:image"
+      content="https://harbor-tycoon-production.up.railway.app/assets/saigon/saigon-town-og-v8.png?v=v13"
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/assets/saigon/icons/app-icon-192-v8.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/assets/saigon/icons/app-icon-180-v8.png" sizes="180x180" />
+    <link
+      rel="preload"
+      href="/assets/saigon/city/saigon-city-board-v6.png"
+      as="image"
+      fetchpriority="high"
+    />
+    <link
+      rel="preload"
+      href="/assets/saigon/fonts/be-vietnam-regular.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/assets/saigon/fonts/be-vietnam-bold.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link rel="preload" href="/assets/saigon/fonts/bungee.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/assets/saigon/fonts/lora.ttf" as="font" type="font/ttf" crossorigin />
+  </head>
+  <body>
+    <main id="app"></main>
+    <section id="start-screen" class="start-screen" aria-label="Harbor Tycoon · Menu">
+      <div class="start-panel">
+        <h1 class="start-logo">HARBOR<span>TYCOON</span></h1>
+        <p role="status">Opening the neighborhood…</p>
+        <p class="ssr-corroboration" style="font-size:12px;opacity:0.85">
+          Built on AI Merchant Engine ·
+          <a href="https://github.com/harrymove-ctrl/harbor-tycoon">GitHub</a> ·
+          <a href="/changelog">Changelog</a> ·
+          <a href="/changelog.xml">RSS Feed</a> ·
+          <a href="/docs">Docs</a> ·
+          <a href="/deploy">Contract Studio</a>
+        </p>
+        <noscript>Please enable JavaScript to play Harbor Tycoon.</noscript>
+      </div>
+    </section>
+    <dialog id="modal"></dialog>
+    <div id="phase-cue" role="status" aria-live="polite"></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="effects" aria-hidden="true"></div>
+    <div id="drag-piece" aria-hidden="true"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,4764 @@
+import { registerGameTools } from './model-context';
+import { query as $, required as get, eventElement, errorMessage } from './dom';
+import type { GameState, GamePhase, Lot, MatchEntryMode, OfferSide, TradeOffer, ShopGroup } from './types';
+import type { SoundEffect } from './audio';
+import type { Camera, Point } from './camera';
+import { researchMarkup } from './research';
+import {
+  SHOPS,
+  DISTRICTS,
+  COMPLETE,
+  INCOMPLETE,
+  KEEP,
+  DISTRICT_MAJORITY_BONUS,
+  getTodayHarborSeedKey,
+  getYearMarketEvent,
+  getPlayerDistrictMajorities,
+  incomeBreakdown,
+  newGame,
+  neighbors,
+  groups,
+  groupIncome,
+  income,
+  holdings,
+  claimPlots,
+  beginBuild,
+  canPlace,
+  placeShop,
+  finishYear,
+  nextYear,
+  rankings,
+  trade,
+  botTradeRound,
+  chooseSmartDraftPlots,
+  findSmartPlayerTrade,
+  findNextSmartBuild,
+  perspectiveSwapState,
+  executeAcceptedPlayerTrade,
+  validSave,
+  updateBoardLayout,
+  migrateEnglishState,
+} from './engine';
+import {
+  buildEmpireXShareUrl,
+  downloadEmpireScoreCard,
+  renderEmpireScoreCardDataUrl,
+  type ScoreCardPayload,
+} from './score-card';
+import { createGameAudio } from './audio';
+import { createTrading } from './trading';
+import { zodiacImages } from './zodiac';
+import { BLOCK_LAYOUTS, PLOT_LAYOUT } from './board-layout';
+import { cameraFor, dragCamera, wheelCamera } from './camera';
+import { MapInput } from './map-input';
+import { preloadGameImages, GAME_IMAGES } from './preload';
+import { installMobileGuards } from './mobile';
+
+import {
+  BURN_ADDRESS,
+  DEFAULT_FLYWHEEL_CONFIG,
+  applyMatchPayouts,
+  applyPointSwap,
+  calculateMatchPayouts,
+  calculatePointSwap,
+  createInitialFlywheelState,
+  type FlywheelState,
+} from '../tokenomics/flywheel';
+import {
+  BURN_EXPLORER_URL,
+  HARBOR_VAULT_CONTRACT_ADDRESS,
+  ROBINHOOD_CHAIN_ID,
+  ROBINHOOD_CHAIN_NAME,
+  ROBINHOOD_MAINNET_CHAIN_ID,
+  ROBINHOOD_MAINNET_EXPLORER_URL,
+  WIF_BLOCKSCOUT_TOKEN_URL,
+  WIF_PONS_LAUNCHPAD_URL,
+  WIF_TOKEN_CONTRACT_ADDRESS,
+  WORLD_IS_FLAT_BUILD_URL,
+  WORLD_IS_FLAT_FAIR_URL,
+  WORLD_IS_FLAT_URL,
+  WalletAdapter,
+  buildMetaMaskMobileDeepLink,
+  detectEip1193WalletSource,
+  discoverEip6963Wallets,
+  fetchLiveOnChainWifProof,
+  fetchOpenMultiplayerRooms,
+  fetchWalletRegistrySummary,
+  hasInjectedWeb3Provider,
+  isMobileBrowserWithoutWallet,
+  reportCompletedMatch,
+  reportWalletConnected,
+  submitOnChainTxVerification,
+  submitWalletSignatureVerification,
+  waitAndVerifyOnChainTx,
+  type HarborWalletRegistrySummary,
+  type OnChainWifProof,
+  type OpenMultiplayerRoomSummary,
+} from '../tokenomics/wallet';
+import {
+  NetworkRoom,
+  generateRoomCode,
+  isValidRoomCode,
+  normalizeRoomCode,
+  type NetworkPacket,
+} from '../network/room';
+import type { RobinCity3DRenderer, TouchDragMode } from './city-3d/robin-city-3d';
+import type { CameraPresetMode, CityAtmosphereMode } from './city-3d/types-3d';
+import { AppleCarousel, type CarouselItem } from '../ui/carousel';
+import { ExposureGrid } from '../ui/exposure-grid';
+import { IPodController, type iPodAction } from '../ui/ipod-controller';
+
+export type BoardViewMode = '2d' | 'tabletop-3d' | 'city-3d';
+
+const SAVE_KEY = 'robintown-save-v2';
+const FLYWHEEL_KEY = 'robintown-flywheel-v1';
+const VIEW_MODE_KEY = 'robintown-view-mode-v1';
+const ATMO_3D_KEY = 'robintown-atmo-3d-v1';
+const TUTORIAL_DONE_KEY = 'robintown-tutorial-done-v1';
+
+function canUseWebGL(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  try {
+    const probe = document.createElement('canvas');
+    return Boolean(
+      window.WebGLRenderingContext &&
+        (probe.getContext('webgl2') ||
+          probe.getContext('webgl') ||
+          probe.getContext('experimental-webgl')),
+    );
+  } catch {
+    return false;
+  }
+}
+
+let city3DModulePromise: Promise<typeof import('./city-3d/robin-city-3d')> | null = null;
+function loadCity3DRendererModule() {
+  if (!city3DModulePromise) {
+    city3DModulePromise = import('./city-3d/robin-city-3d');
+  }
+  return city3DModulePromise;
+}
+
+interface EconomySnapshot {
+  flywheel: FlywheelState;
+  townPoints: number;
+  stakedWif: number;
+  communityVotes: number;
+  simBalances: Record<string, number>;
+  activeSimAddress: string;
+}
+
+const SPRITES = ['coffee', 'banhmi', 'pho', 'flowers', 'tailor', 'grocery'];
+const LANDMARKS = ['tan-dinh', 'ben-thanh', 'thao-dien', 'cho-lon', 'binh-thanh', 'phu-nhuan'];
+const DISTRICT_ACCENTS = ['#39a883', '#eec353', '#29b6f6', '#dc6f57', '#a78bfa', '#34d399'];
+const ZODIAC = [
+  ['Snake', 'Snake', 'snake'],
+  ['Horse', 'Horse', 'horse'],
+  ['Goat', 'Goat', 'goat'],
+  ['Monkey', 'Monkey', 'monkey'],
+  ['Rooster', 'Rooster', 'rooster'],
+  ['Dog', 'Dog', 'dog'],
+] as const;
+const TOKEN_COLORS = ['#39a883', '#eec353', '#dc6f57', '#7fb5cf'];
+
+type Timer = ReturnType<typeof setTimeout>;
+interface PieceDrag {
+  type: 'shop' | 'counter';
+  index: number;
+  el: HTMLElement;
+  id: number;
+  x: number;
+  y: number;
+  active: boolean;
+}
+
+const escape = (s: unknown) =>
+  String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
+  );
+
+const money = (n: number) => `${n.toLocaleString('en-US')} <span class="money-symbol">$GOLD</span>`;
+
+export function mountRobinTown(): void {
+  let state: GameState;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null');
+    state = validSave(saved) ? saved : newGame();
+  } catch {
+    state = newGame();
+  }
+  const migratedNames = migrateEnglishState(state);
+  const layoutUpdated = updateBoardLayout(state);
+  if (migratedNames) {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    } catch {}
+  }
+
+  const wallet = new WalletAdapter({ mode: 'simulation', autoConnect: true });
+  let flywheel: FlywheelState = createInitialFlywheelState();
+  let townPoints = 180;
+  let stakedWif = 0;
+  let communityVotes = 0;
+  let lastMainnetTxHash: string | null = null;
+  let simBalanceOverrides: Record<string, number> = {};
+  let selectedEntryMode: MatchEntryMode = state.entryMode ?? 'casual';
+
+  try {
+    const rawEcon = JSON.parse(localStorage.getItem(FLYWHEEL_KEY) ?? 'null') as Partial<EconomySnapshot> | null;
+    if (rawEcon) {
+      if (rawEcon.flywheel) flywheel = { ...flywheel, ...rawEcon.flywheel };
+      if (typeof rawEcon.townPoints === 'number') townPoints = rawEcon.townPoints;
+      if (typeof rawEcon.stakedWif === 'number') stakedWif = rawEcon.stakedWif;
+      if (typeof rawEcon.communityVotes === 'number') communityVotes = rawEcon.communityVotes;
+      if (rawEcon.activeSimAddress) void wallet.switchAccount(rawEcon.activeSimAddress).catch(() => {});
+      if (rawEcon.simBalances) {
+        for (const [addr, bal] of Object.entries(rawEcon.simBalances)) {
+          if (typeof bal === 'number' && Number.isFinite(bal)) {
+            simBalanceOverrides[addr.toLowerCase()] = bal;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  let viewMode: BoardViewMode = canUseWebGL() ? 'city-3d' : 'tabletop-3d';
+  let last2DMode: '2d' | 'tabletop-3d' = 'tabletop-3d';
+  try {
+    const savedMode = localStorage.getItem(VIEW_MODE_KEY);
+    if (savedMode === '2d' || savedMode === 'tabletop-3d' || (savedMode === 'city-3d' && canUseWebGL())) {
+      viewMode = savedMode;
+      if (savedMode === '2d' || savedMode === 'tabletop-3d') {
+        last2DMode = savedMode;
+      }
+    }
+  } catch {}
+
+  let ledgerPage = 0;
+  let view: 'play' | 'research' = 'play';
+  let selectedShop: number | null = null;
+  let selectedLot: number | null = null;
+  let chosen: number[] = [];
+  let partner = 1;
+  let lastFocus: HTMLElement | null = null;
+  let toastTimer: Timer | undefined;
+  let freshLots: number[] = [];
+  let drag: PieceDrag | null = null;
+  let suppressClick = false;
+  let rackOpen = state.phase === 'build';
+  let menuOpen = true;
+  let ipodOpen = false;
+  let sessionStarted = false;
+  let assetsReady = false;
+  let assetFailures: string[] = [];
+  let loadingCount = 0;
+  let loadingPromise: Promise<unknown> | null = null;
+  let cameraCenter: Point = { x: 550, y: 365 };
+  let camera: Camera | null = null;
+  let cameraInitialized = false;
+  let cameraScale: number | null = null;
+  let lastInputType = 'mouse';
+  const mapInput = new MapInput();
+  let mapTapBlockUntil = 0;
+  let hudResizeObserver: ResizeObserver | null = null;
+  let observedPhase = '';
+  let renderedYear = state.year;
+  let phaseTimer: Timer | undefined;
+  let phaseDelay: Timer | undefined;
+  let cashFrame = 0;
+  let payout: { before: number[]; start: number } | null = null;
+  let freshTimer: Timer | undefined;
+
+  // Interactive 3D & Gadget Subsystems
+  let board3D: RobinCity3DRenderer | null = null;
+  let cameraPreset3D: CameraPresetMode = 'isometric';
+  let touchDragMode3D: TouchDragMode = 'pan';
+  let mobileZenMode = false;
+  let atmosphere3D: CityAtmosphereMode = 'day';
+  try {
+    const savedAtmo = localStorage.getItem(ATMO_3D_KEY);
+    if (savedAtmo === 'day' || savedAtmo === 'sunset' || savedAtmo === 'night') {
+      atmosphere3D = savedAtmo;
+    }
+  } catch {}
+  let startShader: ExposureGrid | null = null;
+  let cityShader: ExposureGrid | null = null;
+  let startCarousel: AppleCarousel | null = null;
+  let ipodController: IPodController | null = null;
+  let activeRoom: NetworkRoom | null = null;
+  let activeRoomCode: string | null = null;
+  let activeRoomUnsub: (() => void) | null = null;
+  let onChainProof: OnChainWifProof | null = null;
+  let onChainProofLoading = false;
+  let walletStats: HarborWalletRegistrySummary | null = null;
+  let walletStatsOffline = false;
+  let walletFlowState: 'idle' | 'connecting' | 'signing' = 'idle';
+  let tradersTab: 'leaderboard' | 'daily' | 'recent' | 'verify' = 'leaderboard';
+  let whatsNewTab: 'highlights' | 'forecast' | 'feeds' = 'highlights';
+  let lastReportedWeb3Address = '';
+  let txVerifyPending = false;
+  let lastPastedTxHash = '';
+  let openRoomsList: OpenMultiplayerRoomSummary[] = [];
+  let openRoomsLoaded = false;
+  let openRoomsLoading = false;
+  let city3DMountPending = false;
+  let hoveredLot3D: number | null = null;
+  let tutorialDone = false;
+  try {
+    tutorialDone = localStorage.getItem(TUTORIAL_DONE_KEY) === '1';
+  } catch {}
+  let incomingHumanProposal: {
+    proposalId: string;
+    fromSeat: number;
+    fromName: string;
+    toSeat: number;
+    give: OfferSide;
+    take: OfferSide;
+  } | null = null;
+  let applyingRemoteTownSync = false;
+  const claimedConnectBonusWallets = new Set<string>();
+  let challengeTargetWif: number | null = null;
+  let challengeSeedOverride: string | null = null;
+
+  // Fast-Time A-to-Z Auto-Play & Live AI Neighbor Feed
+  type FastPlaySpeed = 0 | 1 | 3 | 8;
+  let autoPlaySpeed: FastPlaySpeed = 0;
+  let autoPlayTimer: Timer | undefined;
+  let liveBotFeed = 'Cole, Maya & Clara are ready at the table';
+
+  function recordTradeTaxToVault(taxAmount: number, tradeCount = 1): void {
+    if (taxAmount <= 0 && tradeCount <= 0) return;
+    flywheel = {
+      ...flywheel,
+      totalStakingYield: flywheel.totalStakingYield + Math.max(0, taxAmount),
+      totalTradesTaxed: flywheel.totalTradesTaxed + (taxAmount > 0 ? Math.max(1, tradeCount) : 0),
+    };
+    saveEconomy();
+  }
+
+  function stepDelayMs(speed: FastPlaySpeed): number {
+    if (speed === 8) return 95;
+    if (speed === 3) return 310;
+    return 860;
+  }
+
+  function setAutoPlaySpeed(next: FastPlaySpeed, silent = false): void {
+    clearTimeout(autoPlayTimer);
+    autoPlayTimer = undefined;
+    autoPlaySpeed = next;
+    if (next > 0) {
+      dismissPhase();
+      if (get('#modal').open) closeModal();
+      liveBotFeed = `Fast Play ${next}x active: You, Cole, Maya & Clara playing Year ${state.year}/6`;
+      render();
+      scheduleNextAutoStep(Math.min(180, stepDelayMs(next)));
+    } else {
+      if (!silent) {
+        toast('Fast Play paused. Manual control is active.');
+      }
+      render();
+    }
+  }
+
+  function scheduleNextAutoStep(customMs?: number): void {
+    clearTimeout(autoPlayTimer);
+    if (!autoPlaySpeed || view !== 'play' || menuOpen) return;
+    autoPlayTimer = setTimeout(() => {
+      runAutoPlayStep();
+    }, customMs ?? stepDelayMs(autoPlaySpeed));
+  }
+
+  function runAutoPlayStep(): void {
+    if (!autoPlaySpeed || view !== 'play' || menuOpen) {
+      autoPlaySpeed = 0;
+      return;
+    }
+    dismissPhase();
+    if (get('#modal').open && state.phase !== 'ended') {
+      closeModal();
+    }
+
+    if (state.phase === 'receive') {
+      if (chosen.length !== state.draftCount) {
+        chosen = chooseSmartDraftPlots(state);
+        freshLots = [...chosen];
+        if (chosen[0] !== undefined && autoPlaySpeed <= 3) {
+          focusLot(chosen[0]);
+        }
+        liveBotFeed = `Year ${state.year} Draft: Selecting plots ${chosen.map((id) => '#' + (id + 1)).join(', ')}`;
+        playSound('place');
+        render();
+        scheduleNextAutoStep();
+        return;
+      }
+      const ownedBefore = new Set(state.lots.filter((l) => l.owner !== null).map((l) => l.id));
+      const claimed = [...chosen];
+      claimPlots(state, chosen);
+      const botNew = state.lots
+        .filter((l) => l.owner !== null && l.owner !== 0 && !ownedBefore.has(l.id))
+        .map((l) => l.id);
+      freshLots = [...claimed, ...botNew];
+      chosen = [];
+      selectedLot = null;
+      townPoints += 10;
+      liveBotFeed = `Year ${state.year} Receive: You claimed ${claimed.length} plots · Cole, Maya & Clara claimed ${botNew.length} corners`;
+      playSound('build');
+      changed();
+      scheduleFreshClear();
+      scheduleNextAutoStep();
+      return;
+    }
+
+    if (state.phase === 'trade') {
+      const notes: string[] = [];
+      const smartOffer = findSmartPlayerTrade(state);
+      if (smartOffer) {
+        const res = trade(state, smartOffer);
+        if (res.accepted) {
+          townPoints += 15;
+          if ((res.taxAmount ?? 0) > 0) recordTradeTaxToVault(res.taxAmount ?? 0, 1);
+          notes.push(`You traded with ${state.players[smartOffer.partner].name}`);
+        }
+      }
+      const botRound = botTradeRound(state);
+      if (botRound.totalTax > 0) {
+        recordTradeTaxToVault(botRound.totalTax, botRound.deals.length);
+      }
+      for (const d of botRound.deals) {
+        notes.push(d.summary);
+      }
+      beginBuild(state);
+      selectedLot = null;
+      selectedShop = null;
+      liveBotFeed =
+        notes.length > 0
+          ? `Year ${state.year} Deals: ${notes.join(' · ')}`
+          : `Year ${state.year} Bargain: Neighbors held onto their tiles, opening Build`;
+      playSound('tap');
+      changed();
+      scheduleNextAutoStep();
+      return;
+    }
+
+    if (state.phase === 'build') {
+      if (autoPlaySpeed === 8) {
+        const placedIds: number[] = [];
+        let guard = 0;
+        while (guard++ < 20) {
+          const next = findNextSmartBuild(state);
+          if (!next) break;
+          placeShop(state, next.id, next.shop, 0);
+          placedIds.push(next.id);
+          townPoints += 10;
+        }
+        const builtBefore = new Set(state.lots.filter((l) => l.shop !== null).map((l) => l.id));
+        const cashBefore = state.players.map((p) => p.cash);
+        finishYear(state, isStaked());
+        townPoints += Math.max(15, Math.floor((state.lastIncome[0] ?? 0) / 2));
+        const botBuiltIds = state.lots
+          .filter((l) => l.shop !== null && !builtBefore.has(l.id))
+          .map((l) => l.id);
+        freshLots = [...placedIds, ...botBuiltIds];
+        selectedLot = null;
+        selectedShop = null;
+        liveBotFeed = `Year ${state.year} Payday: You +${state.lastIncome[0]} · Cole +${state.lastIncome[1]} · Maya +${state.lastIncome[2]} · Clara +${state.lastIncome[3]} $GOLD`;
+        changed();
+        scheduleFreshClear();
+        celebratePayday(cashBefore);
+        scheduleNextAutoStep(state.year === 6 ? 220 : 140);
+        return;
+      }
+
+      const next = findNextSmartBuild(state);
+      if (next) {
+        placeShop(state, next.id, next.shop, 0);
+        freshLots = [next.id];
+        selectedLot = null;
+        townPoints += 10;
+        focusLot(next.id);
+        liveBotFeed = `Year ${state.year} Build: You opened ${SHOPS[next.shop].name} on plot #${next.id + 1}`;
+        playSound('build');
+        changed();
+        scheduleFreshClear();
+        scheduleNextAutoStep();
+        return;
+      }
+
+      const builtBefore = new Set(state.lots.filter((l) => l.shop !== null).map((l) => l.id));
+      const cashBefore = state.players.map((p) => p.cash);
+      finishYear(state, isStaked());
+      townPoints += Math.max(15, Math.floor((state.lastIncome[0] ?? 0) / 2));
+      const botBuiltIds = state.lots
+        .filter((l) => l.shop !== null && !builtBefore.has(l.id))
+        .map((l) => l.id);
+      freshLots = botBuiltIds;
+      selectedLot = null;
+      selectedShop = null;
+      liveBotFeed = `Year ${state.year} Payday: Bots opened ${botBuiltIds.length} shops · You +${state.lastIncome[0]}, Cole +${state.lastIncome[1]}, Maya +${state.lastIncome[2]}, Clara +${state.lastIncome[3]} $GOLD`;
+      changed();
+      scheduleFreshClear();
+      celebratePayday(cashBefore);
+      scheduleNextAutoStep(state.year === 6 ? 420 : Math.max(360, stepDelayMs(autoPlaySpeed)));
+      return;
+    }
+
+    if (state.phase === 'income') {
+      cancelAnimationFrame(cashFrame);
+      payout = null;
+      get('#effects').innerHTML = '';
+      nextYear(state);
+      chosen = [];
+      selectedLot = null;
+      selectedShop = null;
+      liveBotFeed = `Year ${state.year} (${ZODIAC[state.year - 1][0]}): Fresh plots & tiles dealt to You, Cole, Maya & Clara`;
+      changed();
+      scheduleNextAutoStep();
+      return;
+    }
+
+    if (state.phase === 'ended') {
+      autoPlaySpeed = 0;
+      clearTimeout(autoPlayTimer);
+      autoPlayTimer = undefined;
+      const topPlayer = rankings(state)[0];
+      liveBotFeed = `Six years complete! ${topPlayer.id === 0 ? 'You won' : topPlayer.name + ' won'} with ${topPlayer.cash} $GOLD`;
+      render();
+      results();
+    }
+  }
+
+  function totalCombinedBurnedWif(): number {
+    return Math.round((onChainProof?.burnedDeadBalanceWif ?? 0) + flywheel.totalBurned);
+  }
+
+  function refreshOnChainProof(): void {
+    if (onChainProofLoading) return;
+    onChainProofLoading = true;
+    void fetchLiveOnChainWifProof()
+      .then((proof) => {
+        if (proof) {
+          onChainProof = proof;
+          if (menuOpen) {
+            const burnPill = $('#start-screen .robin-chain-pill.burn');
+            if (burnPill) {
+              burnPill.textContent = `🔥 ${totalCombinedBurnedWif().toLocaleString('en-US')} $GOLD Burned`;
+            }
+          }
+          if (get('#modal').open && get('#modal').dataset.wifHub === 'true') {
+            openWifHub();
+          }
+          if (get('#modal').open && get('#modal').dataset.whatsNew === 'true') {
+            openWhatsNewModal();
+          }
+        }
+      })
+      .finally(() => {
+        onChainProofLoading = false;
+      });
+  }
+
+  function currentRealWeb3Address(): string | null {
+    const wState = wallet.getState();
+    if (wState.mode === 'web3' && wState.account && !wState.account.isSimulated) {
+      return wState.account.address;
+    }
+    return null;
+  }
+
+  function isCurrentWalletVerified(): boolean {
+    const realAddr = currentRealWeb3Address();
+    if (!realAddr || !walletStats?.me) return false;
+    return (
+      walletStats.me.address.toLowerCase() === realAddr.toLowerCase() &&
+      Boolean(walletStats.me.verified)
+    );
+  }
+
+  function refreshWalletStats(): void {
+    void fetchWalletRegistrySummary(currentRealWeb3Address()).then((summary) => {
+      if (summary) {
+        walletStats = summary;
+        walletStatsOffline = false;
+        if (menuOpen) renderStartMenu();
+        else render();
+        if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') {
+          openTradersBoard();
+        }
+      } else {
+        walletStatsOffline = true;
+      }
+    });
+  }
+
+  async function syncConnectedWeb3Wallet(address: string, chainId: number): Promise<void> {
+    const norm = address.trim().toLowerCase();
+    lastReportedWeb3Address = norm;
+    const summary = await reportWalletConnected({
+      address,
+      chainId,
+      source: detectEip1193WalletSource(),
+    });
+    if (summary) {
+      walletStats = summary;
+      walletStatsOffline = false;
+      if (summary.isFirstConnect && !claimedConnectBonusWallets.has(norm)) {
+        claimedConnectBonusWallets.add(norm);
+        townPoints += 50;
+        saveEconomy();
+        toast(`Connected ${address.slice(0, 6)}…${address.slice(-4)} on Harbor Vault (+50 Town Points)!`);
+      }
+      if (menuOpen) renderStartMenu();
+      else render();
+      if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') {
+        openTradersBoard();
+      }
+      if (get('#modal').open && get('#modal').dataset.wifHub === 'true') {
+        openWifHub();
+      }
+    }
+  }
+
+  async function connectMetaMaskQuick(): Promise<void> {
+    if (walletFlowState !== 'idle') return;
+    walletFlowState = 'connecting';
+    if (menuOpen) renderStartMenu();
+    else render();
+    if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') {
+      openTradersBoard();
+    }
+    try {
+      const acc = await wallet.connectMainnetWif();
+      toast(`Connected to Harbor Syndicate Mainnet (4663) · ${acc.balance} $GOLD`);
+      saveEconomy();
+      await syncConnectedWeb3Wallet(acc.address, ROBINHOOD_MAINNET_CHAIN_ID);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Wallet connection declined.';
+      if (isMobileBrowserWithoutWallet()) {
+        const deepLink = buildMetaMaskMobileDeepLink();
+        modal(
+          'Open Harbor Tycoon in MetaMask Mobile',
+          `<div class="wif-hub-section">
+            <p>Mobile Safari and Chrome do not inject browser wallet extensions directly. Tap below to open this exact table inside the <strong>MetaMask Mobile</strong> in-app browser on <strong>Harbor Syndicate (4663)</strong>, or play Casual Town free right here.</p>
+            <div class="modal-actions">
+              <a class="primary" href="${escape(deepLink)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">🦊 Open in MetaMask App ↗</a>
+              <button type="button" class="secondary" data-action="close">Play Free Casual Town</button>
+            </div>
+          </div>`,
+          'MOBILE WEB3 HANDOFF · CHAIN 4663',
+        );
+      } else {
+        toast(msg);
+      }
+    } finally {
+      walletFlowState = 'idle';
+      if (menuOpen) renderStartMenu();
+      else render();
+      if (get('#modal').open && get('#modal').dataset.wifHub === 'true') openWifHub();
+      if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') openTradersBoard();
+    }
+  }
+
+  async function verifyActiveWalletOwnership(): Promise<void> {
+    if (walletFlowState !== 'idle') return;
+    const realAddr = currentRealWeb3Address();
+    if (!realAddr) {
+      toast('Connect MetaMask or Rabby on Harbor Syndicate (4663) first.');
+      return;
+    }
+    walletFlowState = 'signing';
+    if (menuOpen) renderStartMenu();
+    if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') openTradersBoard();
+    try {
+      let challenge = walletStats?.me?.challengeMessage;
+      if (!challenge || walletStats?.me?.address.toLowerCase() !== realAddr.toLowerCase()) {
+        const fresh = await reportWalletConnected({
+          address: realAddr,
+          chainId: wallet.getState().chainId ?? ROBINHOOD_MAINNET_CHAIN_ID,
+          source: detectEip1193WalletSource(),
+        });
+        if (fresh) {
+          walletStats = fresh;
+          challenge = fresh.me?.challengeMessage;
+        }
+      }
+      if (!challenge) {
+        throw new Error('Could not fetch verification challenge. Please try again.');
+      }
+      const sig = await wallet.signMessage(challenge);
+      const verified = await submitWalletSignatureVerification({
+        address: realAddr,
+        signature: sig,
+      });
+      walletStats = verified;
+      walletStatsOffline = false;
+      if (verified.bonusTownPoints && verified.bonusTownPoints > 0) {
+        townPoints += verified.bonusTownPoints;
+        saveEconomy();
+        toast(`✓ Wallet verified on Harbor Vault (+${verified.bonusTownPoints} Town Points)!`);
+      } else {
+        toast(`✓ Wallet ${realAddr.slice(0, 6)}…${realAddr.slice(-4)} verified!`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Signature verification cancelled.';
+      toast(msg);
+    } finally {
+      walletFlowState = 'idle';
+      if (menuOpen) renderStartMenu();
+      else render();
+      if (get('#modal').open && get('#modal').dataset.wifHub === 'true') openWifHub();
+      if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') openTradersBoard();
+    }
+  }
+
+  function resolveActiveHarborVaultAddress(): string {
+    const candidate = (
+      walletStats?.vaultContractAddress ||
+      onChainProof?.vaultContractAddress ||
+      HARBOR_VAULT_CONTRACT_ADDRESS ||
+      ''
+    ).trim();
+    return /^0x[0-9a-fA-F]{40}$/.test(candidate) ? candidate : '';
+  }
+
+  function markTutorialComplete(): void {
+    if (tutorialDone) return;
+    tutorialDone = true;
+    try {
+      localStorage.setItem(TUTORIAL_DONE_KEY, '1');
+    } catch {}
+  }
+
+  function refreshOpenRooms(forceRender = false): void {
+    if (openRoomsLoading) return;
+    openRoomsLoading = true;
+    void fetchOpenMultiplayerRooms()
+      .then((rooms) => {
+        const changedRooms = JSON.stringify(rooms) !== JSON.stringify(openRoomsList);
+        openRoomsList = rooms;
+        openRoomsLoaded = true;
+        if ((changedRooms || forceRender) && get('#modal').open && get('#modal').dataset.wifHub === 'true') {
+          openWifHub();
+        }
+      })
+      .finally(() => {
+        openRoomsLoading = false;
+      });
+  }
+
+  async function verifyOnChainTxHashInteractive(rawHash?: string): Promise<void> {
+    if (txVerifyPending) return;
+    const hashInput = ($('#verify-tx-hash-input') as HTMLInputElement | null)?.value;
+    const txHash = (rawHash ?? hashInput ?? lastMainnetTxHash ?? '').trim();
+    if (!txHash) {
+      toast('Paste a 66-character 0x Harbor Syndicate (4663) $GOLD transaction hash first.');
+      return;
+    }
+    lastPastedTxHash = txHash;
+    txVerifyPending = true;
+    if (get('#modal').open && get('#modal').dataset.wifHub === 'true') openWifHub();
+    if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') openTradersBoard();
+    try {
+      const verified = await submitOnChainTxVerification({
+        address: currentRealWeb3Address(),
+        txHash,
+      });
+      walletStats = verified;
+      walletStatsOffline = false;
+      lastMainnetTxHash = verified.txHash;
+      if (verified.bonusTownPoints > 0) {
+        townPoints += verified.bonusTownPoints;
+      }
+      saveEconomy();
+      toast(
+        `⛓️ Verified ${verified.wifMoved} $GOLD on Harbor Vault (+${verified.bonusTownPoints} pts${verified.onChainPatronBoost ? ' · 1.20x Patron Boost Active!' : ''})!`,
+      );
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'On-chain $GOLD receipt check failed.');
+    } finally {
+      txVerifyPending = false;
+      if (menuOpen) renderStartMenu();
+      else render();
+      if (get('#modal').open && get('#modal').dataset.wifHub === 'true') openWifHub();
+      if (get('#modal').open && get('#modal').dataset.tradersBoard === 'true') openTradersBoard();
+    }
+  }
+
+  function getLocalRoomSeat(): number {
+    if (!activeRoom) return 0;
+    const seat = activeRoom.getLocalPlayer()?.seat;
+    return typeof seat === 'number' && seat >= 0 && seat < 4 ? seat : 0;
+  }
+
+  function mapLocalSeatToAuth(localIdx: number): number {
+    const mySeat = getLocalRoomSeat();
+    if (mySeat === 0) return localIdx;
+    if (localIdx === 0) return mySeat;
+    if (localIdx === mySeat) return 0;
+    return localIdx;
+  }
+
+  function isLocalSeatPartnerHuman(partnerIdx: number): boolean {
+    if (!activeRoom || activeRoom.state.status !== 'playing') return false;
+    const authSeat = mapLocalSeatToAuth(partnerIdx);
+    const myClient = activeRoom.getLocalPlayer()?.clientId;
+    return activeRoom.state.players.some(
+      (p) => p.connected && p.seat === authSeat && p.clientId !== myClient,
+    );
+  }
+
+  function sendCustomRoomPacket(type: string, payload: Record<string, unknown>): void {
+    if (!activeRoom || !activeRoomCode) return;
+    activeRoom.transport.broadcast({
+      id: `town_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      roomCode: activeRoomCode,
+      senderId: activeRoom.transport.localClientId,
+      sequenceNumber: Date.now(),
+      timestamp: Date.now(),
+      type: type as NetworkPacket['type'],
+      payload,
+    } as unknown as NetworkPacket);
+  }
+
+  function broadcastAuthoritativeTownState(): void {
+    if (!activeRoom || !activeRoomCode || applyingRemoteTownSync) return;
+    const mySeat = getLocalRoomSeat();
+    const authState = mySeat === 0 ? state : perspectiveSwapState(state, mySeat);
+    sendCustomRoomPacket('TOWN_STATE_SYNC', {
+      townState: authState,
+      updatedBySeat: mySeat,
+    });
+  }
+
+  function showIncomingHumanProposalModal(): void {
+    if (!incomingHumanProposal) return;
+    const p = incomingHumanProposal;
+    const formatSide = (side: OfferSide): string => {
+      const parts: string[] = [];
+      if (side.cash > 0) parts.push(`${side.cash} $GOLD`);
+      side.tiles.forEach((cnt, idx) => {
+        if (cnt > 0) parts.push(`${cnt}× ${SHOPS[idx].name}`);
+      });
+      if (side.lots.length > 0) {
+        parts.push(`Plots ${side.lots.map((id) => '#' + (id + 1)).join(', ')}`);
+      }
+      return parts.join(' + ') || 'Nothing';
+    };
+    modal(
+      `Live OTC Deal from ${escape(p.fromName)}`,
+      `<div class="wif-hub-section">
+        <p><strong>${escape(p.fromName)}</strong> offers you: <strong>${escape(formatSide(p.give))}</strong></p>
+        <p>In exchange for your: <strong>${escape(formatSide(p.take))}</strong></p>
+        <p class="muted" style="font-size:12px">1% of any $GOLD cash transfer routes automatically to the Staking Vault.</p>
+        <div class="modal-actions">
+          <button type="button" class="secondary" data-action="decline-pvp-trade">Decline ×</button>
+          <button type="button" class="primary" data-action="accept-pvp-trade">Accept Deal ✓</button>
+        </div>
+      </div>`,
+      `ROOM ${activeRoomCode ?? ''} · LIVE PVP BARGAINING`,
+    );
+  }
+
+  function proposeHumanTradeOverRoom(offer: TradeOffer): boolean {
+    if (!activeRoom || !activeRoomCode) return false;
+    const fromAuthSeat = getLocalRoomSeat();
+    const toAuthSeat = mapLocalSeatToAuth(offer.partner);
+    const proposalId = `pvp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    sendCustomRoomPacket('TOWN_TRADE_PROPOSE', {
+      proposalId,
+      fromSeat: fromAuthSeat,
+      fromName: activeRoom.getLocalPlayer()?.name || 'Trader',
+      toSeat: toAuthSeat,
+      give: offer.give,
+      take: offer.take,
+    });
+    return true;
+  }
+
+  function bindRoomSession(room: NetworkRoom, code: string): void {
+    activeRoomUnsub?.();
+    activeRoom?.stop();
+    activeRoom = room;
+    activeRoomCode = code;
+    const unsubState = room.onStateChange((rState) => {
+      if (rState.players.length > 0) {
+        const mySeat = getLocalRoomSeat();
+        rState.players.forEach((rp) => {
+          if (rp.seat !== null && rp.seat >= 0 && rp.seat < state.players.length && rp.name) {
+            const localIdx = mapLocalSeatToAuth(rp.seat);
+            if (localIdx > 0 && localIdx < state.players.length) {
+              state.players[localIdx].name = rp.name;
+            } else if (mySeat === rp.seat) {
+              state.players[0].name = 'You';
+            }
+          }
+        });
+      }
+      if (get('#modal').open && get('#modal').dataset.wifHub === 'true') {
+        openWifHub();
+      }
+      render();
+    });
+    const unsubMessages = room.transport.onMessage((packet) => {
+      if (!packet || packet.roomCode !== code) return;
+      if (packet.senderId === room.transport.localClientId) return;
+      const rawType = String((packet as { type?: string }).type || '');
+      const payload = ((packet as { payload?: Record<string, unknown> }).payload || {}) as Record<
+        string,
+        unknown
+      >;
+
+      if (rawType === 'TOWN_STATE_SYNC' && payload.townState) {
+        const authState = payload.townState as GameState;
+        if (validSave(authState)) {
+          applyingRemoteTownSync = true;
+          try {
+            const mySeat = getLocalRoomSeat();
+            state = mySeat === 0 ? authState : perspectiveSwapState(authState, mySeat);
+            if (menuOpen) {
+              menuOpen = false;
+              sessionStarted = true;
+              view = 'play';
+            }
+            chosen = chosen.filter((id) => state.pending.includes(id));
+            save();
+            render();
+          } finally {
+            applyingRemoteTownSync = false;
+          }
+        }
+        return;
+      }
+
+      if (rawType === 'TOWN_TRADE_PROPOSE') {
+        const toSeat = Number(payload.toSeat);
+        if (toSeat === getLocalRoomSeat()) {
+          incomingHumanProposal = {
+            proposalId: String(payload.proposalId || ''),
+            fromSeat: Number(payload.fromSeat),
+            fromName: String(payload.fromName || 'Neighbor'),
+            toSeat,
+            give: payload.give as OfferSide,
+            take: payload.take as OfferSide,
+          };
+          playSound('deal-open');
+          showIncomingHumanProposalModal();
+        }
+        return;
+      }
+
+      if (rawType === 'TOWN_TRADE_RESPOND') {
+        const fromSeat = Number(payload.fromSeat);
+        if (fromSeat === getLocalRoomSeat()) {
+          const accepted = Boolean(payload.accepted);
+          const responderName = String(payload.responderName || 'Neighbor');
+          const taxAmount = Number(payload.taxAmount || 0);
+          trading.resolveExternalTradeResult?.(accepted, responderName, taxAmount);
+          if (accepted && taxAmount > 0) recordTradeTaxToVault(taxAmount, 1);
+        }
+        return;
+      }
+
+      if (rawType === 'TOWN_CHAT_PING') {
+        const senderName = String(payload.senderName || 'Neighbor').slice(0, 24);
+        const pingText = String(payload.text || '').slice(0, 64);
+        if (pingText) {
+          liveBotFeed = `Room ${code} · ${senderName}: ${pingText}`;
+          playSound('tap');
+          toast(`${senderName}: ${pingText}`);
+          render();
+        }
+      }
+    });
+    const unsubStatus = room.transport.onStatusChange(() => {
+      if (get('#modal').open && get('#modal').dataset.wifHub === 'true') {
+        openWifHub();
+      }
+    });
+    activeRoomUnsub = () => {
+      unsubState();
+      unsubMessages();
+      unsubStatus();
+    };
+    void room.start().catch(() => {});
+  }
+
+  const isStaked = () => stakedWif >= 500 || Boolean(walletStats?.me?.onChainPatronBoost);
+  const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const gameAudio = createGameAudio({ onChange: () => updateSoundButton() });
+
+  function effectiveAccountBalance(address: string | undefined, fallbackBalance: number): number {
+    if (!address) return fallbackBalance;
+    const key = address.toLowerCase();
+    return key in simBalanceOverrides ? simBalanceOverrides[key] : fallbackBalance;
+  }
+
+  function activeWalletBalance(): number {
+    const wState = wallet.getState();
+    const acc = wState.account;
+    if (!acc) return 0;
+    if (wState.mode === 'simulation') {
+      return effectiveAccountBalance(acc.address, acc.balance);
+    }
+    return acc.balance;
+  }
+
+  function saveEconomy() {
+    try {
+      const simBalances: Record<string, number> = {};
+      for (const acc of wallet.getSimulatedAccounts()) {
+        simBalances[acc.address.toLowerCase()] = effectiveAccountBalance(acc.address, acc.balance);
+      }
+      const wState = wallet.getState();
+      const snapshot: EconomySnapshot = {
+        flywheel,
+        townPoints,
+        stakedWif,
+        communityVotes,
+        simBalances,
+        activeSimAddress: wState.account?.address ?? wallet.getSimulatedAccounts()[0].address,
+      };
+      localStorage.setItem(FLYWHEEL_KEY, JSON.stringify(snapshot));
+    } catch {}
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+      saveEconomy();
+    } catch {
+      toast('Progress cannot be saved. Keep this tab open.');
+    }
+  }
+
+  function adjustActiveWalletBalance(delta: number, burnSink = false): boolean {
+    const wState = wallet.getState();
+    const acc = wState.account;
+    if (!acc) return false;
+    if (wState.mode === 'simulation') {
+      const current = effectiveAccountBalance(acc.address, acc.balance);
+      const next = current + delta;
+      if (next < 0) return false;
+      simBalanceOverrides[acc.address.toLowerCase()] = next;
+      if (delta < 0) {
+        const dest = burnSink ? BURN_ADDRESS : '0x9999999999999999999999999999999999999999';
+        void wallet.transfer(dest, Math.abs(delta)).catch(() => {});
+      }
+      saveEconomy();
+      return true;
+    }
+    return delta >= 0;
+  }
+
+  const trading = createTrading({
+    getState: () => state,
+    sprite,
+    token,
+    modal,
+    closeModal,
+    onChanged: () => {
+      townPoints += 15;
+      changed();
+    },
+    onTradeTax: (taxAmount) => {
+      flywheel = {
+        ...flywheel,
+        totalStakingYield: flywheel.totalStakingYield + taxAmount,
+        totalTradesTaxed: flywheel.totalTradesTaxed + 1,
+      };
+      saveEconomy();
+    },
+    isHumanPartner: (partnerSeat) => isLocalSeatPartnerHuman(partnerSeat),
+    onProposeHumanTrade: (offer) => proposeHumanTradeOverRoom(offer),
+    playSound,
+    onTrading: (v) => gameAudio.setTrading(v),
+    speak: (m, p) => gameAudio.speak(m, p),
+  });
+
+  function changed() {
+    save();
+    broadcastAuthoritativeTownState();
+    render();
+  }
+
+  function toast(message: string) {
+    get('#toast').textContent = message;
+    get('#toast').classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => get('#toast').classList.remove('show'), 3800);
+  }
+
+  function modal(title: string, content: string, eyebrow = 'HARBOR TYCOON') {
+    cancelMapGesture();
+    dismissPhase();
+    delete get('#modal').dataset.settings;
+    delete get('#modal').dataset.wifHub;
+    delete get('#modal').dataset.tradersBoard;
+    delete get('#modal').dataset.whatsNew;
+    get('#modal').classList.remove('ledger-dialog', 'results-dialog');
+    if (trading.isOpen()) trading.cancel();
+    lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    get('#modal').setAttribute('aria-label', title);
+    get('#modal').innerHTML =
+      `<div class="modal-header"><div><p class="eyebrow">${eyebrow}</p><h2>${title}</h2></div><button class="close" aria-label="Close dialog" data-action="close">×</button></div><div class="modal-body">${content}</div>`;
+    if (!get('#modal').open) get('#modal').showModal();
+    get('#modal').scrollTop = 0;
+  }
+
+  function closeModal() {
+    trading.dismiss();
+    get('#modal').close();
+    lastFocus?.focus?.();
+  }
+
+  function sprite(kind: string, name: string, cls = '', extra = '') {
+    return `<img class="pixel ${cls}" src="/assets/saigon/${kind}/${name}.png?v=en2" alt="" draggable="false" ${extra}>`;
+  }
+
+  function zodiacSprite(index: number, cls = '') {
+    return `<img class="pixel ${cls}" src="${zodiacImages[ZODIAC[index][2]]}" alt="${ZODIAC[index][0]}" draggable="false">`;
+  }
+
+  function token(player: number, cls = '') {
+    return sprite('materials', 'stool-' + player + '-v8', 'owner-token ' + cls);
+  }
+
+  function lotLabel(l: Lot) {
+    return `Plot ${l.id + 1}, ${DISTRICTS[Math.floor(l.id / 12)]}, ${l.owner === null ? 'unclaimed' : l.owner === 0 ? 'yours' : state.players[l.owner].name}${l.shop === null ? '' : ', ' + SHOPS[l.shop].name}`;
+  }
+
+  function phaseName(p: GamePhase = state.phase) {
+    return {
+      receive: 'Receive',
+      trade: 'Trade',
+      build: 'Build',
+      income: 'Payday',
+      ended: 'Finale',
+    }[p];
+  }
+
+  function board() {
+    return DISTRICTS.map((name, b) => {
+      const layout = BLOCK_LAYOUTS[b];
+      return `<section class="district district-${b}" style="left:${layout.x}px;top:${layout.y}px" aria-label="${name}"><div class="district-identity"><span class="landmark-medallion">${sprite('signs', LANDMARKS[b] + '-v6')}</span><strong>${name}</strong><span class="district-number">${String(b + 1).padStart(2, '0')}</span></div><div class="district-grid">${state.lots
+        .slice(b * 12, b * 12 + 12)
+        .map((l) => {
+          const cell = PLOT_LAYOUT[l.id],
+            offered = state.pending.includes(l.id),
+            picked = chosen.includes(l.id),
+            shop = l.shop === null ? null : SHOPS[l.shop],
+            valid =
+              state.phase === 'build' &&
+              selectedShop !== null &&
+              canPlace(state, 0, l.id, selectedShop);
+          return `<button data-lot="${l.id}" class="lot ${l.owner !== null ? 'owned' : ''} ${l.owner === 0 ? 'mine' : ''} ${offered ? 'offered' : ''} ${picked ? 'picked' : ''} ${selectedLot === l.id ? 'inspected' : ''} ${shop ? 'built' : ''} ${valid ? 'buildable' : ''} ${freshLots.includes(l.id) ? 'fresh' : ''} ${state.phase === 'build' && l.owner === 0 && l.shop === null ? 'ready-plot' : ''}" aria-label="${lotLabel(l)}" aria-pressed="${picked || selectedLot === l.id}" style="grid-column:${cell.col + 1};grid-row:${cell.row + 1};--piece-delay:${Math.max(0, Math.min(12, freshLots.indexOf(l.id))) * 40}ms"><span class="plot-number">${l.id + 1}</span>${shop && l.shop !== null ? sprite('shops', SPRITES[l.shop], 'built-shop') : '<span class="plot-edge"></span>'}${l.owner !== null ? token(l.owner) : picked ? token(0, 'draft-token') : ''}${valid && selectedShop !== null ? sprite('shops', SPRITES[selectedShop], 'build-ghost') : ''}${shop ? `<span class="plot-target" title="Complete with ${shop.size} connected shops">${shop.size}</span>` : ''}</button>`;
+        })
+        .join('')}</div></section>`;
+    }).join('');
+  }
+
+  function calendar() {
+    const z = ZODIAC[state.year - 1],
+      yrEvent = getYearMarketEvent(state),
+      label = `Year ${state.year}/6 · ${z[0]} · ${yrEvent.title} (${yrEvent.shortTag})`;
+    return `<aside class="calendar paper-calendar" aria-label="Harbor Tycoon year calendar"><div class="calendar-sheet"><button class="calendar-date" data-action="years" title="${escape(label)}" aria-label="${escape(label)}. View all six years"><span class="calendar-heading">HARBOR TYCOON</span><small class="calendar-caption">YEAR</small><strong class="calendar-digit">${state.year}</strong><span class="calendar-animal">${zodiacSprite(state.year - 1)}<b>${z[0]}</b></span><span class="calendar-footnote">${yrEvent.icon} ${state.year} / 6</span></button></div></aside>`;
+  }
+
+  function playerCard() {
+    return `<div class="player-rail">${state.players.map((p, i) => `<div class="player-pocket ${i === 0 ? 'your-pocket' : ''}" style="--player-color:${TOKEN_COLORS[i]}"><button class="pocket-main" data-action="${i !== 0 && state.phase === 'trade' ? 'trade-player' : 'player-info'}" data-player="${i}" aria-label="${i === 0 ? 'Your inventory' : p.name}, ${p.cash} $GOLD"><span class="pocket-token">${token(i)}<b>${i === 0 ? 'YOU' : p.name.toUpperCase()}</b></span><span class="wallet"><strong data-wallet="${i}">${money(p.cash)}</strong><span class="hand-total" aria-label="${p.tiles.reduce((n, x) => n + x, 0)} shop pieces">▧ ${p.tiles.reduce((n, x) => n + x, 0)}</span><small>+${income(state, i, isStaked())}/yr</small></span></button><div class="pocket-inventory" aria-label="Unused shop pieces">${p.tiles.map((n, s) => (n ? `<button data-action="glance-shop" data-player="${i}" data-shop-index="${s}" title="${SHOPS[s].name} ×${n}" aria-label="${p.name}, ${SHOPS[s].name}, ${n}">${sprite('shops', SPRITES[s])}<b>${n}</b></button>` : '')).join('') || `<span>Empty rack</span>`}<button class="inventory-more" data-action="player-info" data-player="${i}" aria-label="View inventory">⋯</button></div></div>`).join('')}</div>`;
+  }
+
+  function hudUtilities() {
+    const wState = wallet.getState();
+    const balance = Math.floor(activeWalletBalance());
+    const realWeb3Addr = currentRealWeb3Address();
+    const shortLabel =
+      realWeb3Addr
+        ? `${realWeb3Addr.slice(0, 6)}…${realWeb3Addr.slice(-4)}`
+        : `${wState.account?.name ?? 'Sim'}`;
+    const myRank = walletStats?.me?.rank ?? null;
+    const totalWallets = walletStats?.totalUniqueWallets ?? 0;
+    const phaseShort = {
+      receive: 'Receive',
+      trade: 'Bargain',
+      build: 'Build',
+      income: 'Payday',
+      ended: 'Final',
+    }[state.phase];
+    const phaseCode = { receive: '01', trade: '02', build: '03', income: '04', ended: '★' }[state.phase];
+    const fastControl =
+      autoPlaySpeed > 0
+        ? `<div class="fast-play-group running" role="group" aria-label="Fast Play speed controls">
+            <button type="button" class="fast-play-btn active" data-action="cycle-fast-speed" title="Cycle Fast Play speed (1x, 3x, 8x)" aria-label="Fast Play running at ${autoPlaySpeed}x speed. Tap to cycle speed">⚡ ${autoPlaySpeed}x</button>
+            <button type="button" class="fast-play-stop" data-action="stop-fast-play" title="Pause Fast Play (Hotkey: F)" aria-label="Pause Fast Play">⏸</button>
+          </div>`
+        : `<button type="button" class="fast-play-btn" data-action="toggle-fast-play" title="Auto-play full 6-year match A to Z with AI bots (Hotkey: F)" aria-label="Start Fast Play A to Z">⚡ <span class="fast-play-label">Fast</span></button>`;
+    return `<div class="robin-hud-utilities">
+      <button type="button" class="mobile-phase-pill" data-action="guide" aria-label="${phaseName()}. Tap for phase guide">
+        <span class="mobile-phase-num">${phaseCode}</span>
+        <span class="mobile-phase-name">${phaseShort}</span>
+      </button>
+      ${fastControl}
+      <button class="view-toggle-btn" data-action="view-toggle" title="Toggle 3D City / Tabletop view (Hotkey: V)" aria-label="Toggle 3D City and Tabletop board view">
+        <span class="view-toggle-icon">${viewMode === 'city-3d' ? '🏙️' : '🗺️'}</span>
+        <span class="view-toggle-label">${viewMode === 'city-3d' ? '3D City' : 'Board'}</span>
+        <span class="view-toggle-swap" aria-hidden="true">⇄</span>
+      </button>
+      <div class="view-mode-segmented" role="group" aria-label="Board view mode">
+        <button class="view-mode-btn ${viewMode === '2d' ? 'active' : ''}" data-action="set-view" data-view-mode="2d" title="Flat 2D Aseprite street map">2D</button>
+        <button class="view-mode-btn ${viewMode === 'tabletop-3d' ? 'active' : ''}" data-action="set-view" data-view-mode="tabletop-3d" title="3D tilted tabletop Aseprite street map">3D Tilt</button>
+        <button class="view-mode-btn ${viewMode === 'city-3d' ? 'active' : ''}" data-action="set-view" data-view-mode="city-3d" title="Full Three.js WebGL 3D City diorama">3D City</button>
+      </div>
+      <button type="button" class="traders-hud-pill ${isCurrentWalletVerified() ? 'verified' : ''}" data-action="open-traders-board" title="View Harbor Leaderboard, Daily Seed & On-Chain Proofs" aria-label="Open Harbor Traders and Wallet Registry">
+        <span>${isCurrentWalletVerified() ? '✓ 🏆' : '🏆'}</span>
+        <span class="traders-hud-count">${myRank ? `#${myRank}` : totalWallets.toLocaleString('en-US')}</span>
+        <span class="traders-hud-label">${myRank ? `· ${totalWallets}` : totalWallets === 1 ? 'Wallet' : 'Wallets'}</span>
+      </button>
+      ${
+        activeRoomCode
+          ? `<button type="button" class="room-hud-pill" data-action="copy-room-link" title="Online Room ${escape(activeRoomCode)} active. Click to copy invite link" aria-label="Copy Online Room ${escape(activeRoomCode)} invite link">🟢 ${escape(activeRoomCode)} 📋</button>`
+          : ''
+      }
+      <button class="wif-hud-pill" data-action="wif-hub" aria-label="Open $GOLD Flywheel, Wallet, and Rooms">
+        <span class="wif-hud-burn">🔥 ${flywheel.totalBurned.toLocaleString('en-US')}</span>
+        <span class="wif-hud-mobile-icon" aria-hidden="true">💰</span>
+        <span class="wif-hud-balance">${realWeb3Addr ? `<span class="wif-hud-acct">🦊 ${escape(shortLabel)} · </span>` : `<span class="wif-hud-acct">${escape(shortLabel)} · </span>`}${balance.toLocaleString('en-US')} $GOLD</span>
+        ${isStaked() ? '<span class="wif-hud-boost">1.20x</span>' : ''}
+      </button>
+      <button class="ipod-hud-btn whats-new-hud-pill" data-action="whats-new" title="What's New in v1.5.0, Today's 6-Year Zodiac Forecast & Release Feeds" aria-label="Open What's New in v1.5.0">✨ v1.5</button>
+      <button class="ipod-hud-btn ${ipodOpen ? 'active' : ''}" data-action="toggle-ipod" aria-pressed="${ipodOpen}" aria-label="Toggle iPod Classic controller">♫ iPod</button>
+      <button class="hud-menu" data-action="menu" aria-label="Game menu">☰<small>Menu</small></button>
+    </div>`;
+  }
+
+  function previewBuildYield(lotId: number, shopIdx: number): {
+    delta: number;
+    completesChain: boolean;
+    nextSize: number;
+    targetSize: number;
+  } {
+    const targetSize = SHOPS[shopIdx]?.size ?? 3;
+    const lot = state.lots[lotId];
+    if (!lot || lot.owner !== 0 || lot.shop !== null) {
+      return { delta: 0, completesChain: false, nextSize: 1, targetSize };
+    }
+    const before = income(state, 0, isStaked());
+    lot.shop = shopIdx;
+    const after = income(state, 0, isStaked());
+    const grp = groups(state, 0).find((g) => g.lots.includes(lotId));
+    const nextSize = grp?.size ?? 1;
+    lot.shop = null;
+    return {
+      delta: Math.max(0, after - before),
+      completesChain: nextSize >= targetSize && nextSize % targetSize === 0,
+      nextSize,
+      targetSize,
+    };
+  }
+
+  function bestRackShopYield(shopIdx: number): number {
+    if ((state.players[0]?.tiles[shopIdx] ?? 0) <= 0) return 0;
+    let best = 0;
+    for (const lot of holdings(state, 0)) {
+      if (lot.shop !== null) continue;
+      const { delta } = previewBuildYield(lot.id, shopIdx);
+      if (delta > best) best = delta;
+    }
+    return best;
+  }
+
+  function phaseCard() {
+    let title: string, body: string, action: string;
+    switch (state.phase) {
+      case 'receive': {
+        title = 'Claim your corner.';
+        body = `Place your stools on ${state.draftCount} glowing plots (★ marks connected street corners).`;
+        const pendingSet = new Set(state.pending);
+        action = `<div class="claim-tools"><button data-drag-token="0" class="counter-stack" aria-label="Drag your stool onto a glowing plot">${[0, 1, 2, 3].map((n) => token(0, `stack-${n}`)).join('')}</button><div class="address-strip">${state.pending
+          .map((id) => {
+            const hasSynergy = neighbors(id).some(
+              (nid) => state.lots[nid].owner === 0 || (nid !== id && pendingSet.has(nid)),
+            );
+            return `<button data-lot="${id}" class="address-slip ${chosen.includes(id) ? 'selected' : ''} ${hasSynergy ? 'synergy-slip' : ''}" aria-pressed="${chosen.includes(id)}" title="Plot #${id + 1} (${DISTRICTS[Math.floor(id / 12)]})${hasSynergy ? ' · Connected corner!' : ''}" aria-label="Plot ${id + 1}, ${DISTRICTS[Math.floor(id / 12)]}${hasSynergy ? ', connected corner' : ''}">${sprite('ui', 'plot-mini-v9', 'draft-ground')}<span class="draft-address">${id + 1}</span>${hasSynergy ? '<span class="draft-synergy" aria-hidden="true">★</span>' : ''}${chosen.includes(id) ? token(0, 'draft-stool') : ''}<span class="draft-district">${String(Math.floor(id / 12) + 1).padStart(2, '0')}</span></button>`;
+          })
+          .join('')}</div>${chosen.length !== state.draftCount ? `<button type="button" class="secondary smart-phase-btn" data-action="coachmark-autopick" title="Highlight the ${state.draftCount} best connected plots">⚡ Smart Pick</button>` : ''}<button class="primary" data-action="claim" ${chosen.length !== state.draftCount ? 'disabled' : ''}>Keep ${chosen.length}/${state.draftCount} ✓</button></div>`;
+        break;
+      }
+      case 'trade': {
+        const smartOffer = findSmartPlayerTrade(state);
+        title = 'Who holds your missing piece?';
+        body = smartOffer
+          ? `Win-win swap ready with ${state.players[smartOffer.partner]?.name ?? 'a neighbor'}! Bargain in $GOLD or jump to Build.`
+          : 'Tap a neighbor, their shop piece, or their street plot to bargain in $GOLD.';
+        action = `${smartOffer ? `<button type="button" class="secondary smart-phase-btn" data-action="smart-trade">💡 Smart Deal ⇄</button>` : ''}<button class="primary" data-action="trade">Bargain ⇄</button><button class="secondary" data-action="build">Build →</button>`;
+        break;
+      }
+      case 'build': {
+        const nextSmart = findNextSmartBuild(state);
+        title = 'Open for business.';
+        body = 'Choose a shop piece below, drag it onto your plot, or tap Quick Build.';
+        action = `<span class="payday-preview">Next payday <b>${income(state, 0, isStaked())} $GOLD</b></span>${nextSmart ? `<button type="button" class="secondary smart-phase-btn" data-action="smart-build-one" title="Open ${SHOPS[nextSmart.shop].name} on plot #${nextSmart.id + 1}">⚡ Open ${SHOPS[nextSmart.shop].name} (#${nextSmart.id + 1})</button>` : ''}<button class="primary" data-action="collect">Finish & collect →</button>`;
+        break;
+      }
+      case 'income':
+        title = 'A thriving year on the block.';
+        body = `Your storefronts brought in ${state.lastIncome[0]} $GOLD${isStaked() ? ' (1.20x staked boost)' : ''}.`;
+        action = `<button class="primary" data-action="next">Welcome year ${state.year + 1} →</button><button class="secondary" data-action="income">Earnings</button>`;
+        break;
+      default:
+        title = 'Six years. One thriving $GOLD town.';
+        body = 'See who grew the richest neighborhood fortune and settle your $GOLD rewards.';
+        action = `<button class="primary" data-action="results">Final standings ★</button>`;
+    }
+    return `<section class="turn-scroll"><div class="phase-heading"><span class="phase-medal">${{ receive: '01', trade: '02', build: '03', income: '04', ended: '★' }[state.phase]}</span><div><small>${phaseName()}</small><h2>${title}</h2></div><button class="replay-guide" data-action="guide" aria-label="Replay phase guide">?</button></div><p>${body}</p><div class="phase-actions">${action}</div></section>`;
+  }
+
+  function hand() {
+    return `<section class="tile-rack" aria-label="Your shop pieces"><div class="rack-label"><span>YOUR SHOP PIECES</span><button class="ledger-shortcut" data-action="businesses"><span aria-hidden="true">▤</span> Open ledger ↗</button></div><div class="shop-tray">${SHOPS.map((s, i) => {
+      const bestDelta = state.phase === 'build' ? bestRackShopYield(i) : 0;
+      return `<button class="shop-piece ${selectedShop === i ? 'active' : ''} ${state.players[0].tiles[i] === 0 ? 'depleted' : ''}" data-shop="${i}" data-drag-shop="${i}" aria-pressed="${selectedShop === i}" aria-label="${s.name}: ${state.players[0].tiles[i]} in your rack. Connect ${s.size} matching shops of your color for ${COMPLETE[s.size]} $GOLD each year"><span class="piece-count"><small>Have</small> ${state.players[0].tiles[i]}</span>${bestDelta > 0 ? `<span class="piece-delta-badge">+${bestDelta}/yr</span>` : ''}${sprite('shops', SPRITES[i])}<strong>${s.name}</strong><small class="shop-requirement"><span>Connect</span> <b>${s.size}</b> <span class="requirement-tail">tiles</span></small><span class="shop-payout">${COMPLETE[s.size]} $GOLD <em>/ year</em></span></button>`;
+    }).join('')}</div><div class="rack-hint">Same shop + your stool color + shared edge = connected business. Stake 500 $GOLD in the Hub for a 1.20x annual payday boost!</div></section>`;
+  }
+
+  function selection() {
+    if (selectedLot === null) return '';
+    const l = state.lots[selectedLot],
+      g =
+        l.shop === null || l.owner === null
+          ? null
+          : groups(state, l.owner).find((grp) => grp.lots.includes(l.id));
+    const build =
+      state.phase === 'build' && l.owner === 0
+        ? `<div class="quick-build"><small>${l.shop === null ? 'OPEN HERE · MARGINAL YIELD' : 'EXPAND THIS BUSINESS'}</small><div>${
+            SHOPS.map((s, i) => {
+              if (!state.players[0].tiles[i] || (l.shop !== null && i !== l.shop)) return '';
+              const preview = l.shop === null ? previewBuildYield(l.id, i) : null;
+              const subText = preview
+                ? `+${preview.delta} $GOLD/yr · ${preview.completesChain ? '★ COMPLETE!' : `${preview.nextSize}/${preview.targetSize} tiles`}`
+                : `×${state.players[0].tiles[i]} · ${s.size} → ${COMPLETE[s.size]} $GOLD`;
+              return `<button data-action="quick-build" data-id="${l.id}" data-index="${i}" aria-label="${l.shop === null ? 'Build' : 'Select'} ${s.name}">${sprite('shops', SPRITES[i])}<strong>${s.name} ×${state.players[0].tiles[i]}</strong><small>${subText}</small></button>`;
+            }).join('') || `<span>No matching pieces in your rack.</span>`
+          }</div></div>`
+        : '';
+    const offeredCanPick = state.phase === 'receive' && state.pending.includes(l.id);
+    return `<div class="plot-inspector"><div class="inspector-top"><span class="inspector-address">${l.id + 1}</span><div><strong>${DISTRICTS[Math.floor(l.id / 12)]}</strong><small>${l.owner === null ? 'Unclaimed' : l.owner === 0 ? 'Your plot' : state.players[l.owner].name}${l.shop !== null ? ' · ' + SHOPS[l.shop].name : ''}</small>${g ? `<small>${g.size}/${SHOPS[g.shop].size} connected · ${groupIncome(g.shop, g.size)} $GOLD/yr</small>` : ''}</div>${offeredCanPick ? `<button class="primary" data-lot="${l.id}">${chosen.includes(l.id) ? 'Lift stool' : 'Place stool'}</button>` : ''}${state.phase === 'trade' && l.owner !== null && l.owner !== 0 ? `<button class="primary" data-action="trade-lot" data-id="${l.id}">Bargain ⇄</button>` : ''}<button class="close" data-action="deselect" aria-label="Close">×</button></div>${build}</div>`;
+  }
+
+  function streetScene() {
+    return `<div class="map-terrain" aria-hidden="true">${sprite('city', 'saigon-city-board-v6', 'city-background')}<span class="street-name street-top">SHERWOOD AVE</span><span class="street-name street-mid">MERCHANT BLVD</span><span class="street-name street-bottom">HARBORFRONT QUAY</span><span class="river-name">ROBINHOOD RIVER</span><div class="vehicle ninja-ride">${sprite('life', 'ninja-lead')}</div><div class="vehicle ninja-return">${sprite('life', 'ninja-lead')}</div><div class="vehicle city-bus">${sprite('life', 'city-bus')}</div><div class="walker crossing-one"><span></span></div><div class="walker crossing-two"><span></span></div><div class="walker crossing-three"><span></span></div></div>`;
+  }
+
+  function render3DHoverTooltip(lotId: number | null) {
+    const tip = $('.city-hover-tooltip');
+    if (!tip) return;
+    if (lotId === null || viewMode !== 'city-3d' || menuOpen) {
+      tip.hidden = true;
+      return;
+    }
+    const lot = state.lots[lotId];
+    if (!lot) {
+      tip.hidden = true;
+      return;
+    }
+    const districtName = DISTRICTS[Math.floor(lotId / 12)] ?? 'Harbor';
+    const ownerLabel =
+      lot.owner === null
+        ? state.pending.includes(lotId)
+          ? chosen.includes(lotId)
+            ? '✓ Selected Draft Deed'
+            : '★ Glowing Land Deed Offer'
+          : 'Unclaimed Street Corner'
+        : lot.owner === 0
+          ? lot.shop !== null
+            ? `Your ${SHOPS[lot.shop].name}`
+            : 'Your Empty Street Plot'
+          : `${state.players[lot.owner]?.name ?? 'Neighbor'}${lot.shop !== null ? ' · ' + SHOPS[lot.shop].name : ' · Empty Plot'}`;
+
+    let detailLine = 'Click to inspect street corner';
+    if (lot.shop !== null && lot.owner !== null) {
+      const grp = groups(state, lot.owner).find((g) => g.lots.includes(lotId));
+      const sz = grp?.size ?? 1;
+      const target = SHOPS[lot.shop].size;
+      const rawYield = groupIncome(lot.shop, sz);
+      const finalYield = lot.owner === 0 && isStaked() ? Math.round(rawYield * 1.2) : rawYield;
+      detailLine = `${sz}/${target} connected · +${finalYield} $GOLD/yr${sz >= target ? ' (COMPLETE!)' : ''}`;
+    } else if (state.phase === 'receive' && state.pending.includes(lotId)) {
+      const hasAdj = neighbors(lotId).some(
+        (nid) => state.lots[nid].owner === 0 || (nid !== lotId && state.pending.includes(nid)),
+      );
+      detailLine = hasAdj
+        ? '★ Adjacent cluster synergy · Click to toggle stool'
+        : 'Click to place or lift your draft stool';
+    } else if (state.phase === 'build' && lot.owner === 0 && lot.shop === null) {
+      if (selectedShop !== null && canPlace(state, 0, lotId, selectedShop)) {
+        const prev = previewBuildYield(lotId, selectedShop);
+        detailLine = `Click to open ${SHOPS[selectedShop].name}: +${prev.delta} $GOLD/yr (${prev.nextSize}/${prev.targetSize})`;
+      } else {
+        detailLine = 'Click for Quick Build menu';
+      }
+    } else if (state.phase === 'trade' && lot.owner !== null && lot.owner !== 0) {
+      detailLine = `Click to bargain with ${state.players[lot.owner]?.name ?? 'Neighbor'} for #${lotId + 1}`;
+    }
+
+    tip.innerHTML = `<small>${escape(districtName)} · PLOT #${lotId + 1}</small><strong>${escape(ownerLabel)}</strong><span>${escape(detailLine)}</span>`;
+    tip.hidden = false;
+  }
+
+  function renderCoachmarkBanner(): string {
+    if (tutorialDone || state.year > 1 || autoPlaySpeed > 0 || menuOpen) return '';
+    if (state.phase === 'receive') {
+      const need = Math.max(0, state.draftCount - chosen.length);
+      return `<div class="coachmark-banner" role="region" aria-label="First-turn interactive guide">
+        <span class="coachmark-step">STEP 1/3</span>
+        <span class="coachmark-copy">${need > 0 ? `Tap ${need} glowing gold ${need === 1 ? 'deed' : 'deeds'} in the 3D Harbor (or click Smart Pick), then press Keep ✓` : `Ready! Press Keep ${state.draftCount}/${state.draftCount} ✓ below to lock in your street corners`}</span>
+        <div class="coachmark-actions">
+          ${need > 0 ? `<button type="button" class="coachmark-btn" data-action="coachmark-autopick">⚡ Smart Pick ${state.draftCount}</button>` : `<button type="button" class="coachmark-btn" data-action="claim">Keep ${state.draftCount}/${state.draftCount} ✓</button>`}
+          <button type="button" class="coachmark-skip" data-action="skip-tutorial" aria-label="Skip tutorial">Skip ×</button>
+        </div>
+      </div>`;
+    }
+    if (state.phase === 'trade') {
+      const hasSmart = Boolean(findSmartPlayerTrade(state));
+      return `<div class="coachmark-banner" role="region" aria-label="First-turn interactive guide">
+        <span class="coachmark-step">STEP 2/3</span>
+        <span class="coachmark-copy">Swap tiles & plots in $GOLD with Cole, Maya & Clara, or jump straight to Build →</span>
+        <div class="coachmark-actions">
+          ${hasSmart ? `<button type="button" class="coachmark-btn" data-action="smart-trade">💡 Load Win-Win Deal</button>` : `<button type="button" class="coachmark-btn" data-action="trade">Bargain ⇄</button>`}
+          <button type="button" class="coachmark-btn secondary" data-action="confirm-build">Build Now →</button>
+          <button type="button" class="coachmark-skip" data-action="skip-tutorial" aria-label="Skip tutorial">Skip ×</button>
+        </div>
+      </div>`;
+    }
+    if (state.phase === 'build') {
+      const nextSmart = findNextSmartBuild(state);
+      return `<div class="coachmark-banner" role="region" aria-label="First-turn interactive guide">
+        <span class="coachmark-step">STEP 3/3</span>
+        <span class="coachmark-copy">Pick a shop piece in your rack below and tap your green plot to earn annual $GOLD!</span>
+        <div class="coachmark-actions">
+          ${nextSmart ? `<button type="button" class="coachmark-btn" data-action="smart-build-one">⚡ Open ${SHOPS[nextSmart.shop].name}</button>` : ''}
+          <button type="button" class="coachmark-skip" data-action="skip-tutorial" aria-label="Finish tutorial">Got it ✓</button>
+        </div>
+      </div>`;
+    }
+    return '';
+  }
+
+  function ensure3DCityMounted() {
+    const stage = $('.three-city-stage');
+    const host = $('.three-city-canvas-host');
+    if (!stage || !host) return;
+    if (viewMode !== 'city-3d') {
+      board3D?.pause();
+      render3DHoverTooltip(null);
+      return;
+    }
+    const shaderCanvas = stage.querySelector<HTMLCanvasElement>('#robin-city-shader');
+    if (shaderCanvas && !cityShader) {
+      cityShader = new ExposureGrid({
+        canvas: shaderCanvas,
+        phaseTheme: state.phase,
+        intensity: 0.55,
+      });
+      cityShader.mount();
+    }
+    cityShader?.setPhaseTheme(state.phase);
+
+    if (!board3D && canUseWebGL() && !city3DMountPending) {
+      city3DMountPending = true;
+      void loadCity3DRendererModule()
+        .then(({ RobinCity3DRenderer: CityRenderer }) => {
+          city3DMountPending = false;
+          const liveStage = $('.three-city-stage');
+          const liveHost = $('.three-city-canvas-host');
+          if (!liveStage || !liveHost || board3D) return;
+          const rect = liveStage.getBoundingClientRect();
+          const fallbackW = typeof window !== 'undefined' ? window.innerWidth || 390 : 1000;
+          const fallbackH =
+            typeof window !== 'undefined' ? Math.round((window.innerHeight || 680) * 0.72) : 620;
+          board3D = new CityRenderer({
+            container: liveHost,
+            width: Math.max(280, rect.width || fallbackW),
+            height: Math.max(240, rect.height || fallbackH),
+            initialPreset: cameraPreset3D,
+            initialAtmosphere: atmosphere3D,
+            onSelectLot: (lotId) => {
+              playSound('tap');
+              clickLot(lotId);
+            },
+            onHoverLot: (lotId) => {
+              hoveredLot3D = lotId;
+              render3DHoverTooltip(lotId);
+            },
+          });
+          board3D.setTouchDragMode(touchDragMode3D);
+          board3D.mount();
+          if (viewMode !== 'city-3d') {
+            board3D.pause();
+            return;
+          }
+          board3D.render({
+            state,
+            selectedLot,
+            chosenLots: chosen,
+            selectedShop,
+          });
+        })
+        .catch(() => {
+          city3DMountPending = false;
+        });
+    } else if (board3D) {
+      board3D.setTouchDragMode(touchDragMode3D);
+      board3D.resume();
+      const rect = stage.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        board3D.resize(rect.width, rect.height);
+      }
+    }
+    board3D?.render({
+      state,
+      selectedLot,
+      chosenLots: chosen,
+      selectedShop,
+    });
+    render3DHoverTooltip(hoveredLot3D);
+    stage
+      .querySelectorAll<HTMLButtonElement>('button[data-action="set-3d-preset"]')
+      .forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.preset === cameraPreset3D);
+      });
+    stage
+      .querySelectorAll<HTMLButtonElement>('button[data-action="set-3d-atmo"]')
+      .forEach((btn) => {
+        btn.classList.toggle('active-atmo', btn.dataset.atmo === atmosphere3D);
+      });
+    const touchBtn = stage.querySelector<HTMLButtonElement>('button[data-action="toggle-3d-touch-mode"]');
+    if (touchBtn) {
+      touchBtn.textContent = touchDragMode3D === 'pan' ? '✋ Pan' : '🔄 Orbit';
+      touchBtn.classList.toggle('active-touch', touchDragMode3D === 'orbit');
+      touchBtn.setAttribute('aria-pressed', String(touchDragMode3D === 'orbit'));
+    }
+    const zenBtn = stage.querySelector<HTMLButtonElement>('button[data-action="toggle-mobile-zen"]');
+    if (zenBtn) {
+      zenBtn.textContent = mobileZenMode ? '⊞ HUD' : '⛶ Full';
+      zenBtn.classList.toggle('active', mobileZenMode);
+      zenBtn.setAttribute('aria-pressed', String(mobileZenMode));
+    }
+    const fastToolbarBtn = stage.querySelector<HTMLButtonElement>('button.fast-toolbar-pill');
+    if (fastToolbarBtn) {
+      fastToolbarBtn.textContent = autoPlaySpeed > 0 ? `⏸ Fast ${autoPlaySpeed}x` : '⚡ Fast A→Z';
+      fastToolbarBtn.classList.toggle('running', autoPlaySpeed > 0);
+      fastToolbarBtn.setAttribute('aria-pressed', String(autoPlaySpeed > 0));
+    }
+  }
+
+  function buildIPodActions(): iPodAction[] {
+    const phaseActions: iPodAction[] = [];
+    if (state.phase === 'receive') {
+      phaseActions.push({
+        id: 'ipod-auto-pick',
+        label: 'Auto-Pick Offered Plots',
+        handler: () => {
+          chosen = state.pending.slice(0, state.draftCount);
+          playSound('place');
+          render();
+        },
+      });
+      phaseActions.push({
+        id: 'ipod-claim',
+        label: `Keep ${chosen.length}/${state.draftCount} Plots`,
+        handler: () => {
+          if (chosen.length === state.draftCount) act('claim');
+          else toast(`Select ${state.draftCount} glowing plots first.`);
+        },
+      });
+    } else if (state.phase === 'trade') {
+      phaseActions.push(
+        { id: 'ipod-trade-1', label: `Bargain with ${state.players[1].name}`, handler: () => { partner = 1; openTrade(); } },
+        { id: 'ipod-trade-2', label: `Bargain with ${state.players[2].name}`, handler: () => { partner = 2; openTrade(); } },
+        { id: 'ipod-trade-3', label: `Bargain with ${state.players[3].name}`, handler: () => { partner = 3; openTrade(); } },
+        { id: 'ipod-to-build', label: 'Finish Deals -> Build', handler: () => act('build') },
+      );
+    } else if (state.phase === 'build') {
+      phaseActions.push(
+        { id: 'ipod-rack', label: rackOpen ? 'Hide Shop Rack' : 'Open Shop Rack', handler: () => act('rack') },
+        { id: 'ipod-collect', label: 'Collect $GOLD Payday', handler: () => act('collect') },
+      );
+    } else if (state.phase === 'income') {
+      phaseActions.push(
+        { id: 'ipod-next', label: `Start Year ${state.year + 1}`, handler: () => act('next') },
+        { id: 'ipod-earnings', label: 'View Earnings Sheet', handler: () => act('income') },
+      );
+    } else {
+      phaseActions.push({
+        id: 'ipod-results',
+        label: 'Final $GOLD Standings',
+        handler: () => act('results'),
+      });
+    }
+
+    phaseActions.push(
+      {
+        id: 'ipod-view',
+        label: `View: ${viewMode === '2d' ? '2D Map' : viewMode === 'tabletop-3d' ? '3D Tilt' : '3D City'}`,
+        handler: () => {
+          const order: BoardViewMode[] = ['2d', 'tabletop-3d', 'city-3d'];
+          const next = order[(order.indexOf(viewMode) + 1) % order.length];
+          setViewMode(next);
+        },
+      },
+      {
+        id: 'ipod-music',
+        label: `Lo-Fi Radio: ${gameAudio.getSettings().music ? 'ON' : 'OFF'}`,
+        handler: () => act('music'),
+      },
+      {
+        id: 'ipod-wif-hub',
+        label: '$GOLD Flywheel & Wallet',
+        handler: () => openWifHub(),
+      },
+      {
+        id: 'ipod-whats-new',
+        label: "What's New v1.5 & Zodiac News",
+        handler: () => openWhatsNewModal(),
+      },
+    );
+    return phaseActions;
+  }
+
+  function syncIPodDock() {
+    const dock = $('#robin-ipod-dock');
+    if (!dock) return;
+    dock.hidden = !ipodOpen || menuOpen || view !== 'play';
+    if (dock.hidden) return;
+    const host = dock.querySelector<HTMLElement>('.robin-ipod-scale');
+    if (!host) return;
+    const title = `Y${state.year} · ${phaseName()}`;
+    const actions = buildIPodActions();
+    if (!ipodController) {
+      ipodController = new IPodController({
+        container: host,
+        menuTitle: title,
+        actions,
+      });
+      ipodController.mount();
+    } else {
+      ipodController.setActions(title, actions);
+    }
+  }
+
+  function setViewMode(next: BoardViewMode) {
+    viewMode = next;
+    if (next === '2d' || next === 'tabletop-3d') {
+      last2DMode = next;
+    }
+    if (typeof document !== 'undefined' && document.body?.dataset) {
+      document.body.dataset.viewMode = viewMode;
+    }
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, viewMode);
+    } catch {}
+    render();
+  }
+
+  function toggleViewMode(): BoardViewMode {
+    const next: BoardViewMode = viewMode === 'city-3d' ? last2DMode : 'city-3d';
+    setViewMode(next);
+    return next;
+  }
+
+  function mountGame() {
+    if ($('.game-shell')) return;
+    get('#app').innerHTML = `<div class="game-shell">
+      <header class="game-hud-top"></header>
+      <div class="play-stage">
+        <section class="board-area">
+          <div class="board-frame">
+            <div class="map-viewport" tabindex="0">
+              <div class="game-world">${streetScene()}<div class="plot-layer"></div></div>
+            </div>
+            <div class="three-city-stage">
+              <canvas id="robin-city-shader" class="robin-shader-canvas" aria-hidden="true"></canvas>
+              <div class="three-city-canvas-host"></div>
+              <div class="city-hover-tooltip" hidden aria-live="off"></div>
+              <div class="three-city-toolbar" role="toolbar" aria-label="3D City camera and atmosphere controls">
+                <span class="three-city-label">3D Neighborhood</span>
+                <button type="button" class="touch-only-pill" data-action="toggle-3d-touch-mode" aria-pressed="false" aria-label="Toggle 1-finger touch drag between Pan and Orbit">✋ Pan</button>
+                <button type="button" data-action="set-3d-preset" data-preset="neighborhood">2D Match</button>
+                <button type="button" data-action="set-3d-preset" data-preset="isometric" class="active">Iso</button>
+                <button type="button" data-action="set-3d-preset" data-preset="street">Street</button>
+                <button type="button" data-action="set-3d-preset" data-preset="topdown">Top</button>
+                <button type="button" data-action="reset-3d-camera">Reset</button>
+                <span class="three-city-sep" aria-hidden="true"></span>
+                <button type="button" data-action="set-3d-atmo" data-atmo="day" class="active-atmo" aria-label="Sunlit Day atmosphere">Day</button>
+                <button type="button" data-action="set-3d-atmo" data-atmo="sunset" aria-label="Golden Sunset atmosphere">Sunset</button>
+                <button type="button" data-action="set-3d-atmo" data-atmo="night" aria-label="Lantern Night atmosphere">Night</button>
+                <span class="three-city-sep" aria-hidden="true"></span>
+                <button type="button" class="fast-toolbar-pill" data-action="toggle-fast-play" aria-pressed="false" title="Run or pause full A to Z Fast Play">⚡ Fast A→Z</button>
+                <button type="button" data-action="view-toggle">2D Map</button>
+                <button type="button" class="mobile-zen-pill" data-action="toggle-mobile-zen" aria-pressed="false" aria-label="Toggle compact full-screen 3D HUD">⛶ Full</button>
+              </div>
+            </div>
+          </div>
+          <div class="stage-top-stack">
+            <div class="bot-live-feed" role="status" aria-live="polite"></div>
+            <div class="coachmark-layer"></div>
+          </div>
+          <div class="calendar-layer"></div>
+          <span class="camera-hint"></span>
+          <div class="inspector-layer"></div>
+        </section>
+      </div>
+      <div class="game-hud-bottom"></div>
+    </div>
+    <aside id="robin-ipod-dock" class="robin-ipod-dock" hidden aria-label="iPod Classic game controller">
+      <div class="robin-ipod-card">
+        <div class="robin-ipod-bar">
+          <span>♫ ROBIN-POD · CLICK WHEEL</span>
+          <button type="button" data-action="toggle-ipod" aria-label="Minimize iPod">×</button>
+        </div>
+        <div class="robin-ipod-scale"></div>
+      </div>
+    </aside>`;
+    hudResizeObserver?.disconnect();
+    hudResizeObserver = new ResizeObserver(() => {
+      fitMap();
+      if (viewMode === 'city-3d') ensure3DCityMounted();
+    });
+    hudResizeObserver.observe(get('.board-frame'));
+  }
+
+  function render() {
+    cancelMapGesture();
+    document.documentElement.lang = 'en';
+    document.body.dataset.phase = state.phase;
+    document.body.dataset.viewMode = viewMode;
+    if (mobileZenMode) {
+      document.body.dataset.mobileZen = '1';
+    } else {
+      delete document.body.dataset.mobileZen;
+    }
+    const qaDebug = new URLSearchParams(window.location.search).get('debug') === '1';
+    if (qaDebug) {
+      document.body.dataset.qaDebug = '1';
+      let pill = $('#robin-qa-debug-pill');
+      if (!pill) {
+        pill = document.createElement('div');
+        pill.id = 'robin-qa-debug-pill';
+        pill.className = 'robin-qa-debug-pill';
+        document.body.appendChild(pill);
+      }
+      pill.textContent = `QA DEBUG · Y${state.year}/${state.phase} · view=${viewMode} · menu=${menuOpen ? 1 : 0} · pending=${state.pending.length} · burned=${flywheel.totalBurned}`;
+    } else {
+      delete document.body.dataset.qaDebug;
+      $('#robin-qa-debug-pill')?.remove();
+    }
+    document.body.classList.toggle('notebook-open', view === 'research');
+    gameAudio.setPhase(state.phase);
+    startShader?.setPhaseTheme(state.phase);
+    cityShader?.setPhaseTheme(state.phase);
+
+    if (view === 'research') {
+      hudResizeObserver?.disconnect();
+      board3D?.unmount();
+      board3D = null;
+      cityShader?.unmount();
+      cityShader = null;
+      ipodController?.unmount();
+      ipodController = null;
+      dismissPhase();
+      get('#app').innerHTML = researchMarkup(state, sprite, token);
+      return;
+    }
+
+    const oldYear = renderedYear,
+      oldTray = $('.shop-tray')?.scrollLeft || 0;
+    const key = state.year + ':' + state.phase,
+      phaseChanged = observedPhase !== key;
+    if (phaseChanged) {
+      rackOpen = state.phase === 'build';
+      if (state.phase === 'receive' || state.phase === 'build') cameraInitialized = false;
+    }
+
+    mountGame();
+    get('.game-shell').inert = menuOpen;
+    document.body.classList.toggle('menu-open', menuOpen);
+    renderStartMenu();
+
+    get('.board-area').setAttribute('aria-label', 'Harbor Tycoon neighborhood game board');
+    get('.map-viewport').setAttribute(
+      'aria-label',
+      'Town map. Drag to move, scroll or pinch to zoom. Arrow keys move, plus and minus zoom, zero shows the whole town on desktop.',
+    );
+    get('.game-hud-top').innerHTML = `<div class="game-brand">HARBOR<span>TYCOON</span></div>${playerCard()}${hudUtilities()}`;
+    get('.plot-layer').innerHTML = board();
+    get('.calendar-layer').innerHTML = calendar();
+    const coachEl = $('.coachmark-layer');
+    if (coachEl) {
+      coachEl.innerHTML = renderCoachmarkBanner();
+    }
+    const botFeedEl = $('.bot-live-feed');
+    if (botFeedEl) {
+      const botDots = `<span class="bot-dots" aria-hidden="true"><i style="background:${TOKEN_COLORS[0]}"></i><i style="background:${TOKEN_COLORS[1]}"></i><i style="background:${TOKEN_COLORS[2]}"></i><i style="background:${TOKEN_COLORS[3]}"></i></span>`;
+      const speedBadge =
+        autoPlaySpeed > 0
+          ? `<span class="bot-feed-speed">⚡ ${autoPlaySpeed}x</span>`
+          : `<span class="bot-feed-tag">LIVE TABLE</span>`;
+      const yrEvt = getYearMarketEvent(state);
+      const evtBadge = `<button type="button" class="zodiac-feed-pill" data-action="year-info" data-year="${state.year}" title="${escape(yrEvt.title)}: ${escape(yrEvt.summary)}">${yrEvt.icon} ${escape(yrEvt.shortTag)}</button>`;
+      const myCashNow = state.players[0]?.cash ?? 0;
+      const targetBadge =
+        challengeTargetWif !== null
+          ? `<span class="challenge-target-badge ${myCashNow > challengeTargetWif ? 'beaten' : ''}">🎯 ${myCashNow > challengeTargetWif ? `Beat ${challengeTargetWif.toLocaleString('en-US')} ✓` : `Target ${challengeTargetWif.toLocaleString('en-US')} $GOLD`}</span>`
+          : '';
+      botFeedEl.innerHTML = `${botDots}${speedBadge}${evtBadge}${targetBadge}<span class="bot-feed-text">${escape(liveBotFeed)}</span>`;
+      botFeedEl.classList.toggle('fast-active', autoPlaySpeed > 0);
+    }
+    get('.camera-hint').textContent =
+      viewMode === 'city-3d'
+        ? '3D City Mode · Click glowing gold parcels to draft or build'
+        : selectedShop !== null && state.phase === 'build'
+          ? `${SHOPS[selectedShop].name} · ${SHOPS[selectedShop].size} connected → ${COMPLETE[SHOPS[selectedShop].size]} $GOLD/yr`
+          : desktopMap()
+            ? 'Drag to move · scroll to zoom · 0: whole town'
+            : 'Swipe to move · pinch to zoom';
+    get('.inspector-layer').innerHTML = selection();
+    get('.game-hud-bottom').innerHTML = `<div class="rack-drawer ${rackOpen ? 'open' : ''}" id="shop-drawer">${hand()}</div><div class="action-belt"><button class="belt-button ${rackOpen ? 'active' : ''}" data-action="rack" aria-expanded="${rackOpen}" aria-controls="shop-drawer" aria-label="Your shop pieces">${selectedShop !== null && state.phase === 'build' ? sprite('shops', SPRITES[selectedShop], 'selected-piece-icon') : '▧'}<small class="selected-piece-label">${selectedShop !== null && state.phase === 'build' ? SHOPS[selectedShop].name : 'Rack ' + state.players[0].tiles.reduce((a, b) => a + b, 0)}</small></button>${phaseCard()}<button class="belt-button" data-action="businesses" aria-label="Open shop ledger">▤<small>Ledger</small></button></div>`;
+    get('.shop-tray').scrollLeft = oldTray;
+    updateSoundButton();
+    syncIPodDock();
+
+    requestAnimationFrame(() => {
+      fitMap();
+      ensure3DCityMounted();
+      updateGuides();
+      animateWallets();
+      if (oldYear !== state.year) animateYear();
+    });
+
+    renderedYear = state.year;
+    if (phaseChanged) {
+      observedPhase = key;
+      dismissPhase();
+      if (!autoPlaySpeed && !['income', 'ended'].includes(state.phase)) {
+        clearTimeout(phaseDelay);
+        phaseDelay = setTimeout(() => showPhase(), oldYear === state.year ? 200 : 1100);
+      }
+    }
+  }
+
+  function moveCamera(center: Point) {
+    const world = $('.game-world'),
+      before = world?.style.transform;
+    cameraCenter = center;
+    cameraInitialized = true;
+    fitMap();
+    if (world && before && !reducedMotion())
+      world.animate([{ transform: before }, { transform: world.style.transform }], {
+        duration: 300,
+        easing: 'cubic-bezier(.2,.7,.2,1)',
+      });
+  }
+
+  function focusLot(id: number) {
+    const cell = PLOT_LAYOUT[id];
+    moveCamera({ x: cell.x + 25, y: cell.y + 25 });
+    board3D?.focusLot(id);
+  }
+
+  function desktopMap() {
+    return globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? false;
+  }
+
+  function fitMap() {
+    const vp = $('.map-viewport'),
+      world = $('.game-world');
+    if (!vp || !world || vp.clientWidth === 0 || vp.clientHeight === 0) return;
+    if (!cameraInitialized) {
+      const id =
+        state.phase === 'receive'
+          ? state.pending[0]
+          : state.lots.find((l) => l.owner === 0 && l.shop === null)?.id;
+      const cell = id === undefined ? null : PLOT_LAYOUT[id];
+      cameraCenter = cell
+        ? { x: BLOCK_LAYOUTS[cell.block].x + 103, y: BLOCK_LAYOUTS[cell.block].y + 103 }
+        : { x: 550, y: 365 };
+      cameraInitialized = true;
+    }
+    camera = cameraFor(
+      vp.clientWidth,
+      vp.clientHeight,
+      cameraCenter,
+      cameraScale,
+      desktopMap() ? 'contain' : 'cover',
+    );
+    cameraCenter = { x: camera.x, y: camera.y };
+    world.style.transform = `translate(${camera.left}px,${camera.top}px) scale(${camera.scale})`;
+  }
+
+  function hasProgress() {
+    return (
+      sessionStarted ||
+      state.year > 1 ||
+      state.phase !== 'receive' ||
+      state.lots.some((l) => l.owner !== null)
+    );
+  }
+
+  function buildShowcaseCarouselItems(): CarouselItem[] {
+    const myMajorities = new Set(getPlayerDistrictMajorities(state, 0));
+    const districtCards: CarouselItem[] = DISTRICTS.map((name, idx) => {
+      const claimedCount = state.lots
+        .slice(idx * 12, idx * 12 + 12)
+        .filter((l) => l.owner !== null).length;
+      const hasMajority = myMajorities.has(idx);
+      return {
+        id: idx + 1,
+        title: `${name} District`,
+        district: hasMajority ? `🏛️ GUILD SEAL (+${DISTRICT_MAJORITY_BONUS})` : `BLOCK 0${idx + 1}`,
+        color: DISTRICT_ACCENTS[idx],
+        owner: `${claimedCount}/12 Claimed`,
+        shop: `${SHOPS[idx].name} (${SHOPS[idx].size} tiles)`,
+        income: COMPLETE[SHOPS[idx].size] + (hasMajority ? DISTRICT_MAJORITY_BONUS : 0),
+      };
+    });
+    return [
+      ...districtCards,
+      {
+        id: 101,
+        title: '5% Match Burn + 90% Purse',
+        district: '$GOLD FLYWHEEL',
+        color: '#2ca56d',
+        owner: `${totalCombinedBurnedWif().toLocaleString('en-US')} $GOLD Burned`,
+        shop: '1.20x Staking Yield',
+        income: 140,
+      },
+    ];
+  }
+
+  function renderStartMenu() {
+    const menu = get('#start-screen');
+    menu.hidden = !menuOpen;
+    if (!menuOpen) {
+      startCarousel?.unmount();
+      startCarousel = null;
+      startShader?.unmount();
+      startShader = null;
+      return;
+    }
+
+    const walletBalance = Math.floor(activeWalletBalance());
+    const realAddr = currentRealWeb3Address();
+    const verifiedNow = isCurrentWalletVerified();
+    const uniqueWalletsCount = walletStats?.totalUniqueWallets ?? 0;
+    const matchesPlayedCount = walletStats?.totalMatchesPlayed ?? 0;
+    const shortRealAddr = realAddr ? `${realAddr.slice(0, 6)}…${realAddr.slice(-4)}` : '';
+    const realBalText = realAddr
+      ? Number((wallet.getState().account?.balance ?? 0).toFixed(2)).toLocaleString('en-US')
+      : '0';
+
+    const metaMaskStripHtml =
+      walletFlowState !== 'idle'
+        ? `<div class="metamask-connect-bar">
+            <button type="button" class="metamask-cta-btn" disabled>
+              <span>⏳ ${walletFlowState === 'signing' ? 'Sign ownership message in wallet…' : 'Opening MetaMask / Rabby on Harbor Vault…'}</span>
+              <span class="metamask-cta-tag">Harbor Vault</span>
+            </button>
+          </div>`
+        : realAddr && verifiedNow
+          ? `<div class="metamask-connect-bar">
+              <div class="metamask-connected-strip verified">
+                <span class="metamask-addr-chip verified">✓ Verified ${escape(shortRealAddr)} · ${realBalText} $GOLD</span>
+                <button type="button" class="metamask-board-btn" data-action="open-traders-board">🏆 Leaderboard (${uniqueWalletsCount})</button>
+              </div>
+            </div>`
+          : realAddr
+            ? `<div class="metamask-connect-bar">
+                <div class="metamask-connected-strip">
+                  <span class="metamask-addr-chip">🟢 ${escape(shortRealAddr)} · ${realBalText} $GOLD</span>
+                  <button type="button" class="metamask-verify-btn" data-action="verify-wallet-sig">✍️ Verify (+100 pts · 0 gas)</button>
+                  <button type="button" class="metamask-board-btn" data-action="open-traders-board">🏆 Rank</button>
+                </div>
+              </div>`
+            : `<div class="metamask-connect-bar">
+                <button type="button" class="metamask-cta-btn" data-action="wif-hub">
+                  <span>🤖 AI Rivals: Cole · Maya · Clara</span>
+                  <span class="metamask-cta-tag">Treasury &amp; Rooms ↗</span>
+                </button>
+                <button type="button" class="metamask-board-btn" data-action="open-traders-board" aria-label="View connected wallets and Harbor Leaderboard">🏆 Leaderboard</button>
+              </div>`;
+
+    const savedModeLabel =
+      state.entryMode === 'ranked'
+        ? 'Ranked Arena'
+        : state.entryMode === 'daily'
+          ? `Daily Seed #${state.dailySeed ?? ''}`
+          : 'Casual Town';
+    const progressActive = hasProgress();
+
+    menu.innerHTML = `<div class="menu-scene" aria-hidden="true"></div>
+      <canvas id="robin-start-shader" class="robin-shader-canvas" aria-hidden="true"></canvas>
+      <div class="start-panel">
+        <div class="robin-kicker-badges">
+          <span class="robin-chain-pill">● AI MERCHANT ENGINE · 3D HARBOR SYNDICATE</span>
+          <span class="robin-chain-pill burn">🔥 ${totalCombinedBurnedWif().toLocaleString('en-US')} $GOLD Burned</span>
+          <button type="button" class="robin-chain-pill traders-live-pill" data-action="open-traders-board" aria-label="View Daily Seed and Harbor Leaderboard">🏆 Daily Seed &amp; AI Leaderboard ↗</button>
+          <button type="button" class="robin-chain-pill whats-new-pill" data-action="whats-new" aria-label="Open What's New in v1.5.0, Today's 6-Year Zodiac Forecast, and Release Feeds">✨ What's New v1.5 ↗</button>
+        </div>
+
+        <div class="start-layout-grid">
+          <div class="start-brand-hero">
+            <h1 class="start-logo">HARBOR<span>TYCOON</span></h1>
+            <div class="menu-shops" aria-hidden="true">${sprite('shops', 'banhmi')}${sprite('shops', 'coffee')}${sprite('shops', 'pho')}</div>
+            <p class="start-description">Bargain for corners, open shops, and grow $GOLD across 6 years.</p>
+          </div>
+
+          <div class="start-command-col">
+            <div class="entry-mode-grid entry-mode-grid-3" role="group" aria-label="Choose match entry mode">
+              <button type="button" class="entry-mode-card ${selectedEntryMode === 'casual' ? 'active' : ''}" data-action="select-entry" data-entry-mode="casual">
+                <strong>Casual Town <span class="entry-tag">FREE</span></strong>
+                <small>Play free vs AI neighbors and earn Town Points.</small>
+              </button>
+              <button type="button" class="entry-mode-card ${selectedEntryMode === 'daily' ? 'active' : ''}" data-action="select-entry" data-entry-mode="daily">
+                <strong>📅 Daily Seed <span class="entry-tag daily">${escape((walletStats?.todaySeed ?? getTodayHarborSeedKey()).slice(5))}</span></strong>
+                <small>Same 6-year global deck today. Top the Daily Leaderboard!</small>
+              </button>
+              <button type="button" class="entry-mode-card ${selectedEntryMode === 'ranked' ? 'active' : ''}" data-action="select-entry" data-entry-mode="ranked">
+                <strong>Ranked Arena <span class="entry-tag">1,000 $GOLD</span></strong>
+                <small>3,600 $GOLD Podium Purse with 5% burn and Vault yield.</small>
+              </button>
+            </div>
+
+            ${metaMaskStripHtml}
+
+            <div class="start-actions">
+              ${
+                challengeTargetWif !== null
+                  ? `<span class="save-caption challenge-banner-caption">🎯 Challenge Active: Beat ${challengeTargetWif.toLocaleString('en-US')} $GOLD${challengeSeedOverride ? ` on Daily Seed ${escape(challengeSeedOverride)}` : ''}</span>`
+                  : progressActive
+                    ? `<span class="save-caption">Saved Match · Year ${state.year}/6 · ${phaseName()} · ${state.players[0].cash} $GOLD (${escape(savedModeLabel)})</span>`
+                    : ''
+              }
+              <button class="primary start-play" data-action="resume" ${assetsReady ? '' : 'disabled'}>${progressActive ? 'Continue game' : selectedEntryMode === 'ranked' ? 'Enter 1,000 $GOLD Arena' : selectedEntryMode === 'daily' ? `Play Daily Seed (${challengeSeedOverride ?? walletStats?.todaySeed ?? getTodayHarborSeedKey()})` : 'Start free game'} <span>▶</span></button>
+              <button class="menu-option fast-menu-cta" data-action="launch-fast-play" ${assetsReady ? '' : 'disabled'}>⚡ Fast Play A to Z (Watch You + Cole, Maya & Clara)</button>
+              <div class="start-secondary-grid ${progressActive ? 'has-save' : 'fresh-save'}">
+                ${progressActive ? `<button class="menu-option" data-action="new">↻ New game</button>` : ''}
+                <button class="menu-option wif-menu-btn" data-action="wif-hub">${progressActive ? `💰 $GOLD Hub (${walletBalance.toLocaleString('en-US')} $GOLD)` : `💰 $GOLD Treasury, AI & Rooms (${walletBalance.toLocaleString('en-US')} $GOLD)`}</button>
+                <button class="menu-option" data-action="rules">📖 How to play</button>
+                <button class="menu-option" data-action="settings">⚙️ Audio & View</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="start-carousel-wrap start-whats-new-box" role="region" aria-label="What's New in Harbor Tycoon v1.5.0">
+            <div class="start-carousel-header">
+              <span>✨ WHAT'S NEW IN v1.5.0</span>
+              <button type="button" class="start-news-all-btn" data-action="whats-new">See All Updates ↗</button>
+            </div>
+            <div class="start-news-grid">
+              <a class="start-news-card" href="/changelog" target="_blank" rel="noopener">
+                <div class="start-news-top">
+                  <strong>📜 Changelog &amp; RSS</strong>
+                  <span class="start-news-tag new">NEW</span>
+                </div>
+                <small>Release notes &amp; XML feeds ↗</small>
+              </a>
+              <a class="start-news-card" href="/docs" target="_blank" rel="noopener">
+                <div class="start-news-top">
+                  <strong>📖 Game &amp; $GOLD Docs</strong>
+                  <span class="start-news-tag new">NEW</span>
+                </div>
+                <small>6-year rules &amp; contract ABI ↗</small>
+              </a>
+              <a class="start-news-card" href="/deploy" target="_blank" rel="noopener">
+                <div class="start-news-top">
+                  <strong>🤖 3 AI Rivals</strong>
+                  <span class="start-news-tag">v1.4</span>
+                </div>
+                <small>Counter-offers &amp; Guild AI ↗</small>
+              </a>
+              <button type="button" class="start-news-card" data-action="whats-new" data-tab="forecast">
+                <div class="start-news-top">
+                  <strong>🔮 6 Zodiac Events</strong>
+                  <span class="start-news-tag">v1.3</span>
+                </div>
+                <small>Daily seed &amp; Guild Seals ↗</small>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="start-footer-bar">
+          <div class="load-status" role="status" aria-live="polite">
+            <progress max="${GAME_IMAGES.length}" value="${loadingCount}"></progress>
+            <span data-load-label></span>
+            <button data-action="retry-assets" hidden>Retry</button>
+          </div>
+          <div class="start-footer-links">
+            <p class="start-foot">Inspired by Chinatown · 2D + 3D Tabletop + Three.js 3D Living City</p>
+            <div class="start-foot-actions">
+              ${progressActive ? `<button class="artbook-link" data-action="businesses">Shop ledger</button> · <button class="artbook-link" data-action="history">Town journal</button> · ` : ''}
+              <button class="artbook-link" data-action="research">Design notebook & Aseprite artbook</button> ·
+              <a class="artbook-link" href="/changelog" target="_blank" rel="noopener">Changelog</a> ·
+              <a class="artbook-link" href="/docs" target="_blank" rel="noopener">Docs</a> ·
+              <a class="artbook-link" href="/changelog.xml" target="_blank" rel="noopener">RSS</a> ·
+              <a class="artbook-link" href="https://github.com/harrymove-ctrl/harbor-tycoon" target="_blank" rel="noopener">GitHub</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const shaderEl = menu.querySelector<HTMLCanvasElement>('#robin-start-shader');
+    if (shaderEl) {
+      startShader?.unmount();
+      startShader = new ExposureGrid({
+        canvas: shaderEl,
+        phaseTheme: state.phase,
+        intensity: 0.65,
+      });
+      startShader.mount();
+    }
+
+    const carouselHost = menu.querySelector<HTMLElement>('#start-apple-carousel');
+    if (carouselHost) {
+      startCarousel?.unmount();
+      startCarousel = new AppleCarousel({
+        container: carouselHost,
+        items: buildShowcaseCarouselItems(),
+        autoplayDurationMs: 4200,
+      });
+      startCarousel.mount();
+    }
+
+    updateLoading();
+  }
+
+  function updateLoading() {
+    const root = $('#start-screen');
+    if (!root || root.hidden) return;
+    const label = root.querySelector<HTMLElement>('[data-load-label]'),
+      progress = root.querySelector('progress'),
+      start = root.querySelector<HTMLButtonElement>('[data-action="resume"]'),
+      fastStart = root.querySelector<HTMLButtonElement>('[data-action="launch-fast-play"]'),
+      retry = root.querySelector<HTMLButtonElement>('[data-action="retry-assets"]');
+    if (progress) {
+      progress.value = loadingCount;
+      progress.hidden = assetsReady;
+    }
+    if (start) start.disabled = !assetsReady;
+    if (fastStart) fastStart.disabled = !assetsReady;
+    if (retry) retry.hidden = !assetFailures.length;
+    if (label)
+      label.textContent = assetFailures.length
+        ? 'Some artwork could not load. Tap Retry.'
+        : assetsReady
+          ? 'The 3D Harbor & AI Merchant Engine are ready'
+          : `Opening the neighborhood… ${loadingCount}/${GAME_IMAGES.length}`;
+  }
+
+  function warmAssets() {
+    if (loadingPromise) return loadingPromise;
+    assetsReady = false;
+    assetFailures = [];
+    loadingCount = 0;
+    updateLoading();
+    loadingPromise = preloadGameImages((count) => {
+      loadingCount = count;
+      updateLoading();
+    })
+      .then((result) => {
+        assetFailures = result.failed;
+        assetsReady = !assetFailures.length;
+        updateLoading();
+      })
+      .finally(() => (loadingPromise = null));
+    return loadingPromise;
+  }
+
+  function gameMenu() {
+    if (autoPlaySpeed > 0) {
+      clearTimeout(autoPlayTimer);
+      autoPlayTimer = undefined;
+      autoPlaySpeed = 0;
+    }
+    cancelMapGesture();
+    cancelDrag();
+    dismissPhase();
+    if (get('#modal').open) closeModal();
+    menuOpen = true;
+    render();
+    requestAnimationFrame(() =>
+      $('#start-screen [data-action="resume"]')?.focus({ preventScroll: true }),
+    );
+  }
+
+  function audioSettings() {
+    const a = gameAudio.getSettings();
+    modal(
+      'Audio & Tabletop View',
+      `<div class="settings-switches">
+        <button class="setting-switch" data-action="music" id="music-toggle" aria-pressed="${a.music}">
+          <span><strong>♫ Harbor Tycoon Lo-Fi Radio</strong><small>Synthesized score shifts with each phase</small></span>
+          <b data-audio-state></b>
+        </button>
+        <button class="setting-switch" data-action="sound" id="sound-toggle" aria-pressed="${a.sfx}">
+          <span><strong>♪ Tabletop & Neighbor Sounds</strong><small>Stool taps, shop openings, bargaining voices</small></span>
+          <b data-audio-state></b>
+        </button>
+        <button class="setting-switch" data-action="cycle-view">
+          <span><strong>◈ Board Camera Perspective</strong><small>Switch between 2D Flat, 3D Tabletop Tilt, and 3D City</small></span>
+          <b>${viewMode === '2d' ? '2D Flat' : viewMode === 'tabletop-3d' ? '3D Tilt' : '3D City'} ⇄</b>
+        </button>
+      </div>
+      <p class="audio-note">Preferences save automatically in your browser.</p>
+      <div class="modal-actions"><button class="primary" data-action="close">Done ✓</button></div>`,
+      'HARBOR TYCOON · SETTINGS',
+    );
+    get('#modal').dataset.settings = 'true';
+    updateSoundButton();
+  }
+
+  function openWifHub() {
+    if (!onChainProof) refreshOnChainProof();
+    if (!openRoomsLoaded && !openRoomsLoading) refreshOpenRooms();
+    const wState = wallet.getState();
+    const simAccounts = wallet.getSimulatedAccounts();
+    const activeAddr = wState.account?.address ?? '';
+    const activeBal = Math.floor(activeWalletBalance());
+    const swapQuote = calculatePointSwap(townPoints);
+    const roomSnap = activeRoom?.state;
+    const connectedPeers = roomSnap?.players.filter((p) => p.connected) ?? [];
+    const wsActive = activeRoom?.isCloudRelayActive() ?? false;
+    const patronActive = Boolean(walletStats?.me?.onChainPatronBoost);
+    const eip6963Wallets = discoverEip6963Wallets();
+    const selectedRdns = wallet.getSelectedProviderRdns();
+    const vaultAddr = resolveActiveHarborVaultAddress();
+    const vaultReady = Boolean(vaultAddr);
+    const blockLabel = onChainProof?.mainnetBlockNumber
+      ? `#${onChainProof.mainnetBlockNumber.toLocaleString('en-US')}`
+      : 'Harbor Vault';
+
+    modal(
+      '$GOLD Wallet, Staking & Rooms',
+      `<div class="wif-hub-grid">
+        <div class="wif-stat-box"><small>🔥 Harbor Vault Burned</small><strong>${totalCombinedBurnedWif().toLocaleString('en-US')} $GOLD</strong></div>
+        <div class="wif-stat-box"><small>🏦 Staking Vault</small><strong>${flywheel.totalStakingYield.toLocaleString('en-US')} $GOLD</strong></div>
+        <div class="wif-stat-box"><small>💰 Active Balance</small><strong>${activeBal.toLocaleString('en-US')} $GOLD</strong></div>
+        <div class="wif-stat-box"><small>🌾 Town Points</small><strong>${townPoints.toLocaleString('en-US')} pts</strong></div>
+      </div>
+
+      <div class="wif-hub-sections-grid wif-hub-grid-2x2">
+      <section class="wif-hub-section">
+        <h3>🤖 1. Treasury & AI Profiles</h3>
+        <p>Switch between 4 pre-funded merchant seats or sync profile.</p>
+        ${
+          eip6963Wallets.length > 0
+            ? `<div class="wif-row-actions eip6963-wallet-row" style="margin-bottom:6px" aria-label="Detected EIP-6963 browser wallets">
+                ${eip6963Wallets
+                  .map(
+                    (item) =>
+                      `<button type="button" class="eip6963-wallet-pill ${selectedRdns === (item.info.rdns || item.info.name) ? 'active' : ''}" data-action="select-eip6963-wallet" data-rdns="${escape(item.info.rdns || item.info.uuid || item.info.name)}">🔌 ${escape(item.info.name)}</button>`,
+                  )
+                  .join('')}
+              </div>`
+            : ''
+        }
+        <div class="wif-row-actions" style="margin-bottom:6px">
+          ${simAccounts
+            .map(
+              (acc) =>
+                `<button type="button" class="wif-sim-pill ${wState.mode === 'simulation' && acc.address === activeAddr ? 'active' : ''}" data-action="select-sim-wallet" data-address="${acc.address}">${escape(acc.name)} · ${Math.floor(effectiveAccountBalance(acc.address, acc.balance)).toLocaleString('en-US')}</button>`,
+            )
+            .join('')}
+        </div>
+        <div class="wif-row-actions">
+          <button type="button" class="primary" data-action="connect-mainnet-wif">${wState.mode === 'web3' && wState.status === 'connected' && wState.chainId === ROBINHOOD_MAINNET_CHAIN_ID ? `✓ ${activeAddr.slice(0, 6)}…${activeAddr.slice(-4)}` : '🤖 Sync AI Profile'}</button>
+          <button type="button" class="secondary" data-action="burn-mainnet-wif" data-amount="1">🔥 Burn 1 $GOLD</button>
+          <button type="button" class="secondary" data-action="open-traders-board">🏆 Rank (${walletStats?.totalUniqueWallets ?? 0})</button>
+        </div>
+      </section>
+
+      <section class="wif-hub-section">
+        <h3>🏦 2. 1.20x Staking &amp; Vault</h3>
+        <p>Stake $GOLD for 1.20x shop paydays and on-chain reputation.</p>
+        <div class="wif-row-actions" style="margin-bottom:6px">
+          <span class="robin-chain-pill" style="font-size:11px;color:#14422c;background:rgba(20,66,44,0.1);border-color:rgba(20,66,44,0.28)">${patronActive ? '✓ 1.20x Patron Active' : isStaked() ? '✓ 500 $GOLD Staked (1.20x)' : 'Base Yield: 1.00x'}</span>
+          <button type="button" class="secondary" data-action="patronize-mainnet-wif">🏛️ Patronize 10 $GOLD</button>
+        </div>
+        <div class="wif-row-actions">
+          <button type="button" class="primary" data-action="toggle-stake">${stakedWif >= 500 ? 'Unstake 500 $GOLD' : 'Stake 500 $GOLD (1.20x)'}</button>
+          ${
+            vaultReady
+              ? `<button type="button" class="secondary" data-action="anchor-match-onchain">⛓️ Anchor Score</button>`
+              : `<a class="secondary" href="/deploy" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">🚀 Deploy Vault ↗</a>`
+          }
+        </div>
+      </section>
+
+      <section class="wif-hub-section">
+        <h3>🌾 3. Swap Points to $GOLD</h3>
+        <p>Redeem Town Points for $GOLD (10 pts = 1 $GOLD, 3% burn).</p>
+        <div class="wif-row-actions">
+          <button type="button" class="primary" data-action="swap-points" ${swapQuote.netWif <= 0 ? 'disabled' : ''}>Swap ${townPoints} pts → +${swapQuote.netWif} $GOLD</button>
+          <button type="button" class="secondary" data-action="vote-burn">🔥 Burn 100 Vote (${communityVotes})</button>
+        </div>
+      </section>
+
+      <section class="wif-hub-section">
+        <h3>🟢 4. Online 4-Player Rooms</h3>
+        <p>Host or join a 6-character table across any device.</p>
+        <div class="wif-row-actions">
+          <button type="button" class="primary" data-action="create-room">Create Room</button>
+          <input id="join-room-input" class="room-code-input" type="text" maxlength="6" placeholder="CODE6X" value="${activeRoomCode ?? ''}" aria-label="6-character room code" />
+          <button type="button" class="secondary" data-action="join-room">Join</button>
+          ${activeRoomCode ? `<button type="button" class="secondary" data-action="copy-room-link">📋 Link</button>` : ''}
+        </div>
+        ${
+          openRoomsList.length > 0
+            ? `<div class="open-rooms-list" aria-label="Open multiplayer rooms">
+                ${openRoomsList
+                  .map(
+                    (rm) => `<div class="open-room-chip">
+                      <span>🟢 <strong>${escape(rm.code)}</strong> · ${rm.players}/${rm.maxPlayers} Seats</span>
+                      ${
+                        activeRoomCode === rm.code
+                          ? `<span class="trader-badge verified">Joined ✓</span>`
+                          : `<button type="button" class="secondary" data-action="quick-join-room" data-room="${escape(rm.code)}">Join →</button>`
+                      }
+                    </div>`,
+                  )
+                  .join('')}
+              </div>`
+            : ''
+        }
+        ${
+          activeRoomCode
+            ? `<div class="wif-row-actions" style="margin-top:6px">
+                <span class="robin-chain-pill">Room ${activeRoomCode} · ${connectedPeers.length || 1}/4 · ${wsActive ? 'Cloud Live' : 'P2P Ready'}</span>
+                ${
+                  activeRoom?.isLocalHost()
+                    ? `<button type="button" class="primary" data-action="start-online-room">Start ▶</button>`
+                    : `<button type="button" class="secondary" data-action="toggle-room-ready">${activeRoom?.getLocalPlayer()?.isReady ? 'Ready ✓' : 'Ready'}</button>`
+                }
+              </div>`
+            : ''
+        }
+      </section>
+      </div>
+
+      <div class="whats-new-footer-bar">
+        <span>⛓️ Harbor Syndicate ${blockLabel} · <a href="/docs" target="_blank" rel="noopener">$GOLD Token ↗</a></span>
+        <span class="whats-new-feed-links">
+          <a href="/docs" target="_blank" rel="noopener">🤖 Loadout AI Engine</a> ·
+          <a href="/changelog" target="_blank" rel="noopener">📜 Changelog</a> ·
+          <a href="/docs" target="_blank" rel="noopener">📖 Docs</a> ·
+          <a href="/deploy" target="_blank" rel="noopener">🚀 Deploy</a>
+        </span>
+      </div>
+
+      <div class="modal-actions"><button class="primary" data-action="close">Back to Harbor Tycoon ✓</button></div>`,
+      'HARBOR TYCOON · TREASURY, AI & ROOMS',
+    );
+    get('#modal').dataset.wifHub = 'true';
+  }
+
+  function openTradersBoard(nextTab?: 'leaderboard' | 'daily' | 'recent' | 'verify') {
+    if (nextTab) tradersTab = nextTab;
+    if (!walletStats) refreshWalletStats();
+    const realAddr = currentRealWeb3Address();
+    const verifiedNow = isCurrentWalletVerified();
+    const uniqueWallets = walletStats?.totalUniqueWallets ?? 0;
+    const verifiedCount = walletStats?.verifiedWallets ?? 0;
+    const totalMatches = walletStats?.totalMatchesPlayed ?? 0;
+    const walletMatches = walletStats?.walletMatchesPlayed ?? 0;
+    const guestMatches = walletStats?.guestMatchesPlayed ?? 0;
+    const leaderboardRows = walletStats?.leaderboard ?? [];
+    const dailyRows = walletStats?.dailyLeaderboard ?? [];
+    const todaySeed = walletStats?.todaySeed ?? getTodayHarborSeedKey();
+    const recentRows = walletStats?.recentWallets ?? [];
+    const me = walletStats?.me ?? null;
+
+    let tabBody = '';
+    if (tradersTab === 'leaderboard') {
+      tabBody =
+        leaderboardRows.length === 0
+          ? `<div class="traders-empty-card">
+              <h3>No Verified Wallets Yet</h3>
+              <p>Connect MetaMask on Harbor Vault to claim #1 (+50 pts).</p>
+              <button type="button" class="primary" data-action="connect-mainnet-wif" ${walletFlowState !== 'idle' ? 'disabled' : ''}>🤖 AI Rivals: Cole (Shark) · Maya (Guilds) · Clara (Arb) (Harbor Vault)</button>
+            </div>`
+          : `<div class="traders-table-wrap">
+              <table class="traders-table" aria-label="Harbor Traders Leaderboard">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Trader Wallet</th>
+                    <th>Status & Proofs</th>
+                    <th>Best Year-6 $GOLD</th>
+                    <th>Matches</th>
+                    <th>Harbor Vault $GOLD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${leaderboardRows
+                    .map(
+                      (row) => `<tr>
+                        <td><strong>#${row.rank}</strong></td>
+                        <td><code>${escape(row.shortAddress)}</code></td>
+                        <td>
+                          <span class="trader-badge ${row.verified ? 'verified' : ''}">${row.verified ? '✓ Verified' : 'Connected'}</span>
+                          ${(row.currentStreakDays ?? 0) >= 2 ? `<span class="streak-pill">🔥 ${row.currentStreakDays}d</span>` : ''}
+                          ${row.onChainPatronBoost ? `<span class="streak-pill patron">1.20x Patron</span>` : ''}
+                          ${
+                            (row.verifiedTxCount ?? 0) > 0 && row.lastVerifiedTxHash
+                              ? `<a class="trader-tx-link" href="${ROBINHOOD_MAINNET_EXPLORER_URL}/tx/${encodeURIComponent(row.lastVerifiedTxHash)}" target="_blank" rel="noopener">⛓️ ${row.verifiedTxCount} Tx ↗</a>`
+                              : ''
+                          }
+                        </td>
+                        <td><strong>${row.bestNetWorthWif.toLocaleString('en-US')} $GOLD</strong></td>
+                        <td>${row.matchesPlayed} (${row.wins}W)</td>
+                        <td>${row.onChainWifBalance.toLocaleString('en-US')} $GOLD</td>
+                      </tr>`,
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>`;
+    } else if (tradersTab === 'daily') {
+      tabBody =
+        dailyRows.length === 0
+          ? `<div class="traders-empty-card">
+              <h3>📅 Daily Seed (${escape(todaySeed)})</h3>
+              <p>Same 6-year deck worldwide today. Post the first score!</p>
+              <button type="button" class="primary" data-action="launch-daily-seed">📅 Play Today's Daily Seed ▶</button>
+            </div>`
+          : `<div class="traders-table-wrap">
+              <table class="traders-table" aria-label="Daily Harbor Challenge Leaderboard">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Trader</th>
+                    <th>Seed</th>
+                    <th>Best Daily $GOLD</th>
+                    <th>Runs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${dailyRows
+                    .map(
+                      (row) => `<tr>
+                        <td><strong>#${row.rank}</strong></td>
+                        <td><code>${escape(row.label)}</code> ${row.verified ? '<span class="trader-badge verified">✓</span>' : ''}</td>
+                        <td><code>${escape(todaySeed)}</code></td>
+                        <td><strong>${row.bestNetWorthWif.toLocaleString('en-US')} $GOLD</strong></td>
+                        <td>${row.attempts}${row.won ? ' (Won)' : ''}</td>
+                      </tr>`,
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>`;
+    } else if (tradersTab === 'recent') {
+      tabBody =
+        recentRows.length === 0
+          ? `<div class="traders-empty-card">
+              <h3>No Connected Wallets Yet</h3>
+              <p>Connect MetaMask or Rabby on Harbor Vault to appear here.</p>
+              <button type="button" class="primary" data-action="connect-mainnet-wif" ${walletFlowState !== 'idle' ? 'disabled' : ''}>🤖 AI Rivals: Cole (Shark) · Maya (Guilds) · Clara (Arb)</button>
+            </div>`
+          : `<div class="traders-table-wrap">
+              <table class="traders-table" aria-label="Recently Connected Wallets">
+                <thead>
+                  <tr>
+                    <th>Wallet</th>
+                    <th>Client</th>
+                    <th>Status & Proofs</th>
+                    <th>On-Chain $GOLD</th>
+                    <th>Matches</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recentRows
+                    .map(
+                      (row) => `<tr>
+                        <td><code>${escape(row.shortAddress)}</code></td>
+                        <td>${escape(row.source.toUpperCase())}</td>
+                        <td>
+                          <span class="trader-badge ${row.verified ? 'verified' : ''}">${row.verified ? '✓ Verified' : 'Connected'}</span>
+                          ${
+                            (row.verifiedTxCount ?? 0) > 0 && row.lastVerifiedTxHash
+                              ? `<a class="trader-tx-link" href="${ROBINHOOD_MAINNET_EXPLORER_URL}/tx/${encodeURIComponent(row.lastVerifiedTxHash)}" target="_blank" rel="noopener">⛓️ ${row.verifiedTxCount} Tx ↗</a>`
+                              : ''
+                          }
+                        </td>
+                        <td>${row.onChainWifBalance.toLocaleString('en-US')} $GOLD</td>
+                        <td>${row.matchesPlayed}</td>
+                      </tr>`,
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>`;
+    } else {
+      const verifyHeading = !realAddr
+        ? '🛡️ Verify Wallet &amp; Tx'
+        : verifiedNow
+          ? '✓ Verified Harbor Trader'
+          : '✍️ Verify Wallet Ownership';
+      const verifySummary = !realAddr
+        ? 'Connect MetaMask (+50 pts), sign 0-gas (+100 pts), or verify a $GOLD tx.'
+        : verifiedNow
+          ? `Ownership verified on Harbor Vault. Best score: ${(me?.bestNetWorthWif ?? 0).toLocaleString('en-US')} $GOLD.`
+          : 'Sign a free 0-gas message to unlock the Verified badge (+100 pts).';
+      tabBody = `<section class="wif-hub-section">
+        <h3>${verifyHeading}</h3>
+        <p>${verifySummary}</p>
+        ${
+          me?.challengeMessage && !verifiedNow
+            ? `<code class="challenge-code-box">${escape(me.challengeMessage)}</code>`
+            : ''
+        }
+        <div class="wif-row-actions">
+          ${
+            !realAddr
+              ? `<button type="button" class="primary" data-action="connect-mainnet-wif" ${walletFlowState !== 'idle' ? 'disabled' : ''}>${walletFlowState === 'connecting' ? '⏳ Connecting…' : '🤖 Sync AI Profile'}</button>`
+              : !verifiedNow
+                ? `<button type="button" class="primary" data-action="verify-wallet-sig" ${walletFlowState !== 'idle' ? 'disabled' : ''}>${walletFlowState === 'signing' ? '⏳ Signing…' : '✍️ Sign & Verify (+100 pts)'}</button>`
+                : `<span class="robin-chain-pill">✓ Verified${me?.rank ? ` · Rank #${me.rank}` : ''}</span>`
+          }
+          <button type="button" class="secondary" data-action="refresh-wallet-stats">↻ Refresh</button>
+          <button type="button" class="secondary" data-action="wif-hub">💰 $GOLD Hub</button>
+        </div>
+        <div class="tx-verify-row" style="margin-top:8px">
+          <input id="verify-tx-hash-input" class="tx-hash-input" type="text" maxlength="66" placeholder="Paste Harbor Vault $GOLD tx hash (0x...)" value="${escape(lastMainnetTxHash ?? lastPastedTxHash)}" aria-label="Robinhood Harbor Vault $GOLD transaction hash" />
+          <button type="button" class="secondary" data-action="verify-onchain-tx" ${txVerifyPending ? 'disabled' : ''}>${txVerifyPending ? '⏳ Checking…' : '⛓️ Verify Tx (+150 pts)'}</button>
+        </div>
+      </section>`;
+    }
+
+    modal(
+      'Harbor Traders & Live Wallet Registry',
+      `<div class="wif-hub-grid">
+        <div class="wif-stat-box"><small>🦊 Unique Wallets</small><strong>${uniqueWallets.toLocaleString('en-US')}</strong></div>
+        <div class="wif-stat-box"><small>✓ Signed & Verified</small><strong>${verifiedCount.toLocaleString('en-US')}</strong></div>
+        <div class="wif-stat-box"><small>🎲 Matches Played</small><strong>${totalMatches.toLocaleString('en-US')}</strong></div>
+        <div class="wif-stat-box"><small>📊 Wallet vs Guest</small><strong>${walletMatches}W / ${guestMatches}G</strong></div>
+      </div>
+      ${walletStatsOffline ? `<p class="muted" style="margin:8px 0 0;font-size:12px">Showing cached local state while live telemetry reconnects.</p>` : ''}
+      <div class="traders-tabs" role="tablist" aria-label="Harbor registry views">
+        <button type="button" role="tab" aria-selected="${tradersTab === 'leaderboard'}" class="traders-tab-btn ${tradersTab === 'leaderboard' ? 'active' : ''}" data-action="set-traders-tab" data-tab="leaderboard">🏆 Top Net Worth</button>
+        <button type="button" role="tab" aria-selected="${tradersTab === 'daily'}" class="traders-tab-btn ${tradersTab === 'daily' ? 'active' : ''}" data-action="set-traders-tab" data-tab="daily">📅 Daily Seed</button>
+        <button type="button" role="tab" aria-selected="${tradersTab === 'recent'}" class="traders-tab-btn ${tradersTab === 'recent' ? 'active' : ''}" data-action="set-traders-tab" data-tab="recent">🦊 Connected (${uniqueWallets})</button>
+        <button type="button" role="tab" aria-selected="${tradersTab === 'verify'}" class="traders-tab-btn ${tradersTab === 'verify' ? 'active' : ''}" data-action="set-traders-tab" data-tab="verify">🛡️ Verify & Tx</button>
+      </div>
+      ${tabBody}
+      <div class="modal-actions"><button class="primary" data-action="close">Back to Harbor Tycoon ✓</button></div>`,
+      'HARBOR TYCOON · LIVE LEADERBOARD',
+    );
+    get('#modal').dataset.tradersBoard = 'true';
+  }
+
+  function openWhatsNewModal(nextTab?: 'highlights' | 'forecast' | 'feeds') {
+    if (nextTab) whatsNewTab = nextTab;
+    if (!onChainProof && !onChainProofLoading) refreshOnChainProof();
+    if (!walletStats) refreshWalletStats();
+    const todaySeed = walletStats?.todaySeed ?? getTodayHarborSeedKey();
+    const blockLabel = onChainProof?.mainnetBlockNumber
+      ? `#${onChainProof.mainnetBlockNumber.toLocaleString('en-US')}`
+      : 'Harbor Vault';
+
+    let tabBody = '';
+    if (whatsNewTab === 'forecast') {
+      const dailyPreviewState = newGame(Math.random, 'daily', todaySeed);
+      const yearCards = ZODIAC.map((z, idx) => {
+        const yr = idx + 1;
+        const evt = getYearMarketEvent(dailyPreviewState, yr);
+        return `<div class="wif-hub-section whats-new-forecast-card">
+          <div class="whats-new-head">
+            <strong>Y${yr} · ${z[0]} (${KEEP[idx]} plots)</strong>
+            <span class="zodiac-feed-pill forecast-badge">${evt.icon} ${escape(evt.shortTag)}</span>
+          </div>
+          <h4 class="whats-new-forecast-title">${evt.icon} ${escape(evt.title)}</h4>
+          <p class="whats-new-forecast-desc">${escape(evt.summary)}</p>
+        </div>`;
+      }).join('');
+      tabBody = `<section class="wif-hub-section whats-new-forecast-banner">
+        <div>
+          <h3>🔮 Daily Seed <code>${escape(todaySeed)}</code> · 6-Year Forecast</h3>
+          <p class="whats-new-summary" style="margin:2px 0 0">Same 6-year plot draws and Zodiac modifiers for every player today.</p>
+        </div>
+        <div class="wif-row-actions">
+          <button type="button" class="primary" data-action="launch-daily-seed">📅 Play Seed (${escape(todaySeed)}) ▶</button>
+          <button type="button" class="secondary" data-action="copy-daily-seed-link">🔗 Copy Link</button>
+        </div>
+      </section>
+      <div class="whats-new-grid forecast-grid-3">${yearCards}</div>`;
+    } else {
+      tabBody = `<div class="whats-new-simple-list">
+        <section class="wif-hub-section whats-new-row featured">
+          <div class="whats-new-row-copy">
+            <div class="whats-new-row-title">
+              <span class="whats-new-badge new">NEW · v1.5</span>
+              <h3>📜 Live Changelog &amp; Release Feeds</h3>
+            </div>
+            <p class="whats-new-summary">Read dated release notes and subscribe via RSS, Atom, or JSON.</p>
+          </div>
+          <a class="primary whats-new-cta" href="/changelog" target="_blank" rel="noopener">Open /changelog ↗</a>
+        </section>
+
+        <section class="wif-hub-section whats-new-row">
+          <div class="whats-new-row-copy">
+            <div class="whats-new-row-title">
+              <span class="whats-new-badge new">NEW · v1.5</span>
+              <h3>📖 Game &amp; Smart Contract Docs</h3>
+            </div>
+            <p class="whats-new-summary">Full 6-year rules, storefront payout table, and HarborVault ABI.</p>
+          </div>
+          <a class="secondary whats-new-cta" href="/docs" target="_blank" rel="noopener">Read /docs ↗</a>
+        </section>
+
+        <section class="wif-hub-section whats-new-row">
+          <div class="whats-new-row-copy">
+            <div class="whats-new-row-title">
+              <span class="whats-new-badge">v1.4</span>
+              <h3>🤖 Autonomous AI Merchant Rivals</h3>
+            </div>
+            <p class="whats-new-summary">Cole, Maya, and Clara evaluate spatial adjacency and counter-offer live.</p>
+          </div>
+          <a class="secondary whats-new-cta" href="/deploy" target="_blank" rel="noopener">Deploy Studio ↗</a>
+        </section>
+
+        <section class="wif-hub-section whats-new-row">
+          <div class="whats-new-row-copy">
+            <div class="whats-new-row-title">
+              <span class="whats-new-badge">v1.3</span>
+              <h3>🔮 Daily Seed &amp; 6 Zodiac Events</h3>
+            </div>
+            <p class="whats-new-summary">Play today's seed (${escape(todaySeed)}) with Zodiac bonuses and Guild Seals.</p>
+          </div>
+          <button type="button" class="secondary whats-new-cta" data-action="launch-daily-seed">Play Daily Seed ▶</button>
+        </section>
+      </div>
+      <div class="whats-new-footer-bar">
+        <span>🔥 <strong>${totalCombinedBurnedWif().toLocaleString('en-US')} $GOLD</strong> burned on ${blockLabel}</span>
+        <span class="whats-new-feed-links">
+          <a href="/changelog.xml" target="_blank" rel="noopener">📡 RSS</a> ·
+          <a href="/atom.xml" target="_blank" rel="noopener">⚛️ Atom</a> ·
+          <a href="/feed.json" target="_blank" rel="noopener">📦 JSON</a> ·
+          <a href="/llms.txt" target="_blank" rel="noopener">🤖 llms.txt</a>
+        </span>
+      </div>`;
+    }
+
+    modal(
+      "What's New in Harbor Tycoon",
+      `<div class="traders-tabs whats-new-tabs-simple" role="tablist" aria-label="What's New views">
+        <button type="button" role="tab" aria-selected="${whatsNewTab !== 'forecast'}" class="traders-tab-btn ${whatsNewTab !== 'forecast' ? 'active' : ''}" data-action="set-whats-new-tab" data-tab="highlights">✨ Latest Updates (v1.5.0)</button>
+        <button type="button" role="tab" aria-selected="${whatsNewTab === 'forecast'}" class="traders-tab-btn ${whatsNewTab === 'forecast' ? 'active' : ''}" data-action="set-whats-new-tab" data-tab="forecast">🔮 Today's 6-Year Forecast</button>
+      </div>
+      ${tabBody}
+      <div class="modal-actions"><button class="primary" data-action="close">Back to Harbor Tycoon ✓</button></div>`,
+      'HARBOR TYCOON · v1.5.0 UPDATE',
+    );
+    get('#modal').dataset.whatsNew = 'true';
+  }
+
+  function yearBook() {
+    modal(
+      'Six Zodiac Years in Harbor Tycoon',
+      `<div class="year-list">${ZODIAC.map((z, i) => {
+        const evt = getYearMarketEvent(state, i + 1);
+        return `<button class="${i + 1 === state.year ? 'current' : ''}" data-action="year-info" data-year="${i + 1}">${zodiacSprite(i)}<span>Year ${i + 1} · ${z[0]}<small style="display:block;font-size:11px;opacity:0.85">${evt.icon} ${escape(evt.title)}: ${escape(evt.shortTag)}</small></span><span>${i + 1 === state.year ? 'Now' : i + 1 < state.year ? '✓' : ''}</span></button>`;
+      }).join('')}</div>`,
+      'THE ROBIN-TOWN CALENDAR',
+    );
+  }
+
+  function updateGuides() {
+    document
+      .querySelectorAll<HTMLElement>('.guide-target')
+      .forEach((e) => e.classList.remove('guide-target'));
+    const selector = {
+      receive:
+        chosen.length === state.draftCount ? '[data-action="claim"]' : '.lot.offered:not(.picked)',
+      trade: '.player-pocket:not(.your-pocket) .pocket-main',
+      build: selectedShop === null ? '.shop-piece:not(.depleted)' : '.lot.buildable',
+      income: '[data-action="next"]',
+      ended: '[data-action="results"]',
+    }[state.phase];
+    document.querySelectorAll(selector).forEach((e) => e.classList.add('guide-target'));
+  }
+
+  function showPhase(manual = false) {
+    clearTimeout(phaseDelay);
+    if (autoPlaySpeed > 0 || view !== 'play' || menuOpen || get('#modal').open) return;
+    if (!manual && !tutorialDone && state.year === 1) return;
+    if (!manual && state.phase !== 'receive') return;
+    clearTimeout(phaseTimer);
+    const descriptions: Record<GamePhase, string> = {
+      receive: `Choose ${state.draftCount} glowing addresses. Place your green stools, then keep your selection.`,
+      trade:
+        'Tap a neighbor or one of their plots. Offer $GOLD, plots, or shop tiles to bargain for missing pieces.',
+      build:
+        'Pick a shop from your rack and tap your empty plot, drag it straight onto the street, or tap your plot for quick build.',
+      income:
+        'Every business has paid its owner in $GOLD. Start the next zodiac year whenever you are ready.',
+      ended:
+        'The sixth payday is complete! Open the final standings to settle your $GOLD rewards.',
+    };
+    const yrEvt = getYearMarketEvent(state);
+    get('#phase-cue').innerHTML =
+      `<section class="phase-announcement"><button data-action="dismiss-phase" class="close" aria-label="Dismiss guide">×</button><small>YEAR ${state.year} · ${ZODIAC[state.year - 1][0]}</small><h2>${phaseName()}</h2><p>${descriptions[state.phase]}</p><div class="zodiac-event-pill">${yrEvt.icon} ${escape(yrEvt.title)}: ${escape(yrEvt.shortTag)}</div>${state.phase === 'receive' ? `<div class="deal-reels">${state.pending.map((id, i) => `<span style="--deal-delay:${i * 90}ms"><b>${id + 1}</b></span>`).join('')}</div>` : state.phase === 'build' ? `<div class="cue-sprites">${sprite('shops', 'coffee')}${sprite('shops', 'banhmi')}${sprite('shops', 'pho')}</div>` : state.phase === 'trade' ? `<div class="cue-tokens">${token(0)}<b>⇄</b>${token(1)}</div>` : ''}<button class="primary" data-action="dismiss-phase">Let us go →</button><div class="cue-countdown"></div></section>`;
+    get('#phase-cue').classList.add('show');
+    playSound('phase');
+    phaseTimer = setTimeout(dismissPhase, manual ? 6500 : 2600);
+  }
+
+  function dismissPhase() {
+    clearTimeout(phaseTimer);
+    clearTimeout(phaseDelay);
+    $('#phase-cue')?.classList.remove('show');
+  }
+
+  function animateYear() {
+    playSound('year');
+    if (reducedMotion()) return;
+    $('.calendar-sheet')?.animate(
+      [
+        { transform: 'perspective(350px) rotateX(-45deg)', filter: 'brightness(1.35)' },
+        { transform: 'perspective(350px) rotateX(0deg)', filter: 'brightness(1)' },
+      ],
+      { duration: 900, easing: 'cubic-bezier(.2,.8,.2,1)' },
+    );
+  }
+
+  function clickLot(id: number) {
+    dismissPhase();
+    if (state.phase === 'receive') {
+      if (!state.pending.includes(id)) {
+        selectedLot = id;
+        render();
+        return;
+      }
+      selectedLot = null;
+      if (chosen.includes(id)) chosen = chosen.filter((x) => x !== id);
+      else if (chosen.length < state.draftCount) {
+        chosen.push(id);
+        freshLots = [id];
+        playSound('place');
+      } else toast(`Keep ${state.draftCount} addresses. Lift a stool first.`);
+      render();
+      scheduleFreshClear();
+      return;
+    }
+    if (state.phase === 'build' && selectedShop !== null && canPlace(state, 0, id, selectedShop)) {
+      buildPiece(id, selectedShop);
+      return;
+    }
+    selectedLot = id;
+    render();
+  }
+
+  function buildPiece(id: number, shop: number) {
+    const before = income(state, 0, isStaked());
+    placeShop(state, id, shop);
+    if (state.year === 1) markTutorialComplete();
+    selectedLot = null;
+    freshLots = [id];
+    townPoints += 10;
+    playSound('build');
+    if (!state.players[0].tiles[shop]) selectedShop = null;
+    changed();
+    scheduleFreshClear();
+    const g = groups(state, 0).find((grp) => grp.lots.includes(id));
+    toast(
+      `${SHOPS[shop].name} · ${g?.size ?? 1}/${SHOPS[shop].size} connected · +${income(state, 0, isStaked()) - before} $GOLD/yr`,
+    );
+    return { id, shop, annualIncome: income(state, 0, isStaked()) };
+  }
+
+  function scheduleFreshClear() {
+    clearTimeout(freshTimer);
+    freshTimer = setTimeout(() => {
+      freshLots = [];
+      document.querySelectorAll<HTMLElement>('.fresh').forEach((el) => el.classList.remove('fresh'));
+    }, 1800);
+  }
+
+  function updateSoundButton() {
+    const a = gameAudio.getSettings();
+    for (const [selector, on, label] of [
+      ['#music-toggle', a.music, 'Music'],
+      ['#sound-toggle', a.sfx, 'Game sounds'],
+    ] as const) {
+      const el = $(selector);
+      if (!el) continue;
+      el.setAttribute('aria-pressed', String(on));
+      el.setAttribute('aria-label', `${label}: ${on ? 'on' : 'off'}`);
+      const stateLabel = el.querySelector<HTMLElement>('[data-audio-state]');
+      if (stateLabel) stateLabel.textContent = on ? 'On' : 'Off';
+    }
+  }
+
+  function playSound(kind: SoundEffect = 'tap') {
+    gameAudio.play(kind);
+  }
+
+  function animateWallets() {
+    if (!payout) return;
+    cancelAnimationFrame(cashFrame);
+    const p = payout,
+      elapsed = performance.now() - p.start,
+      t = reducedMotion() ? 1 : Math.min(1, Math.max(0, (elapsed - 350) / 1600)),
+      ease = 1 - Math.pow(1 - t, 3);
+    state.players.forEach((player, i) => {
+      const el = $(`[data-wallet="${i}"]`);
+      if (el) {
+        el.innerHTML = money(Math.round(p.before[i] + (player.cash - p.before[i]) * ease));
+        el.classList.toggle('wallet-counting', t < 1);
+      }
+    });
+    if (t < 1) cashFrame = requestAnimationFrame(animateWallets);
+    else payout = null;
+  }
+
+  function resolveLotScreenPoint(lotId: number, liftY = 24): { x: number; y: number } | null {
+    if (viewMode === 'city-3d' && board3D) {
+      const projected = board3D.projectLotToScreen(lotId, liftY);
+      if (projected) return projected;
+    }
+    const r = $(`[data-lot="${lotId}"]`)?.getBoundingClientRect();
+    if (!r) return null;
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+
+  function celebratePayday(before: number[]) {
+    dismissPhase();
+    payout = { before, start: performance.now() };
+    playSound('income');
+    animateWallets();
+    const fx = get('#effects');
+    fx.innerHTML = '';
+    if (!reducedMotion()) {
+      state.players.forEach((_, i) => {
+        const to = $(`[data-wallet="${i}"]`)?.getBoundingClientRect();
+        if (!to) return;
+        const sources = holdings(state, i)
+          .filter((l) => l.shop !== null)
+          .slice(0, 5);
+        sources.forEach((l, n) => {
+          const pt = resolveLotScreenPoint(l.id, 26);
+          if (!pt) return;
+          const el = document.createElement('div');
+          el.className = 'flying-note';
+          el.innerHTML = sprite('life', 'game-banknote');
+          fx.append(el);
+          const sx = pt.x,
+            sy = pt.y,
+            tx = to.x + to.width / 2,
+            ty = to.y + to.height / 2;
+          const anim = el.animate(
+            [
+              { transform: `translate(${sx}px,${sy}px) rotate(-18deg) scale(.6)`, opacity: 0 },
+              {
+                offset: 0.18,
+                transform: `translate(${sx}px,${sy - 40}px) rotate(8deg) scale(1.1)`,
+                opacity: 1,
+              },
+              { transform: `translate(${tx}px,${ty}px) rotate(0) scale(.5)`, opacity: 0 },
+            ],
+            {
+              duration: 1500,
+              delay: n * 100 + i * 70,
+              easing: 'cubic-bezier(.3,.1,.4,1)',
+              fill: 'both',
+            },
+          );
+          anim.onfinish = () => el.remove();
+        });
+      });
+
+      groups(state, 0)
+        .slice(0, 6)
+        .forEach((grp, idx) => {
+          const anchorPt = resolveLotScreenPoint(grp.lots[0], 34);
+          if (!anchorPt) return;
+          const rawEarn = groupIncome(grp.shop, grp.size);
+          const boostedEarn = isStaked() ? Math.round(rawEarn * 1.2) : rawEarn;
+          const pop = document.createElement('div');
+          pop.className = 'payday-lot-popup';
+          pop.textContent = `+${boostedEarn} $GOLD`;
+          pop.style.left = `${Math.round(anchorPt.x)}px`;
+          pop.style.top = `${Math.round(anchorPt.y)}px`;
+          fx.append(pop);
+          const anim = pop.animate(
+            [
+              { transform: 'translate(-50%, 0px) scale(0.85)', opacity: 0 },
+              { offset: 0.2, transform: 'translate(-50%, -18px) scale(1.06)', opacity: 1 },
+              { transform: 'translate(-50%, -48px) scale(0.95)', opacity: 0 },
+            ],
+            { duration: 1850, delay: idx * 110, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'both' },
+          );
+          anim.onfinish = () => pop.remove();
+        });
+      if (state.year === 6) {
+        const fireworkPalette = ['#eec353', '#8bf5b5', '#39a883', '#ff8c66', '#7fb5cf'];
+        const vw = window.innerWidth || 1000;
+        const vh = window.innerHeight || 700;
+        for (let b = 0; b < 4; b++) {
+          const cx = Math.round(vw * (0.24 + b * 0.17));
+          const cy = Math.round(vh * (0.2 + (b % 2) * 0.1));
+          for (let s = 0; s < 10; s++) {
+            const angle = (Math.PI * 2 * s) / 10;
+            const dist = 65 + (s % 2) * 28;
+            const dx = Math.round(Math.cos(angle) * dist);
+            const dy = Math.round(Math.sin(angle) * dist);
+            const spark = document.createElement('span');
+            spark.className = 'harbor-firework-spark';
+            spark.style.left = `${cx}px`;
+            spark.style.top = `${cy}px`;
+            spark.style.background = fireworkPalette[(b + s) % fireworkPalette.length];
+            fx.append(spark);
+            const sparkAnim = spark.animate(
+              [
+                { transform: 'translate(-50%, -50%) scale(0.4)', opacity: 1 },
+                { offset: 0.7, transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1.15)`, opacity: 0.95 },
+                { transform: `translate(calc(-50% + ${Math.round(dx * 1.2)}px), calc(-50% + ${Math.round(dy * 1.2 + 18)}px)) scale(0.2)`, opacity: 0 },
+              ],
+              { duration: 1550, delay: b * 240, easing: 'cubic-bezier(.16,.84,.32,1)', fill: 'both' },
+            );
+            sparkAnim.onfinish = () => spark.remove();
+          }
+        }
+      }
+    }
+    const yrEvt = getYearMarketEvent(state);
+    const banner = document.createElement('div');
+    banner.className = 'payday-banner';
+    banner.innerHTML = `<small>${state.year === 6 ? '★ FINAL YEAR 6 HARBOR PAYDAY ★' : 'YEAR-END $GOLD PAYDAY'}</small><strong>+${state.lastIncome[0]} $GOLD</strong><span>${isStaked() ? `1.20x Staking Boost · ${yrEvt.icon} ${escape(yrEvt.title)}` : `${yrEvt.icon} ${escape(yrEvt.title)} · Storefronts paid out`}</span>`;
+    fx.append(banner);
+    setTimeout(() => banner.remove(), 3200);
+  }
+
+  function openTrade(prefillLot: number | null = null, prefillShop: number | null = null) {
+    if (state.phase !== 'trade')
+      return toast('Trading opens right after you claim your addresses.');
+    if (prefillLot !== null) partner = state.lots[prefillLot].owner ?? partner;
+    trading.open(partner, prefillLot, prefillShop);
+  }
+
+  function playerInfo(id: number) {
+    const p = state.players[id];
+    modal(
+      id === 0 ? 'Your inventory.' : `${p.name} · Inventory`,
+      `<div class="neighbor-summary">${token(p.id)}<strong>${money(p.cash)}</strong><span>${holdings(state, id).length} plots · ${income(state, id, isStaked())} $GOLD/yr</span></div><p>${id === 0 ? 'Choose a shop piece to place during the Build phase.' : state.phase === 'trade' ? 'Tap any shop below to start a $GOLD bargain for that piece.' : 'Unused shop pieces held by this neighbor. Bargain for them during Trade.'}</p><div class="neighbor-shop-grid">${SHOPS.map((s, i) => `<button data-action="glance-shop" data-player="${id}" data-shop-index="${i}" ${p.tiles[i] === 0 ? 'disabled' : ''}>${sprite('shops', SPRITES[i])}<strong>${s.name} ×${p.tiles[i]}</strong><small>${s.size} tiles → ${COMPLETE[s.size]} $GOLD</small></button>`).join('')}</div><p class="mini-label">ADDRESSES</p><div class="neighbor-lots">${
+        holdings(state, id)
+          .map(
+            (l) =>
+              `<button data-action="inspect-player-lot" data-id="${l.id}">${l.shop !== null ? sprite('shops', SPRITES[l.shop]) : token(id)}<b>${l.id + 1}</b></button>`,
+          )
+          .join('') || 'None yet.'
+      }</div>${state.phase === 'trade' && id !== 0 ? `<button class="primary wide" data-action="trade-player" data-player="${id}">Bargain with ${p.name} ⇄</button>` : ''}${id === 0 ? `<button class="secondary wide" data-action="businesses">Business ledger</button>` : ''}`,
+    );
+  }
+
+  function rules() {
+    modal(
+      'Build a corner worth coming back to.',
+      `<p>You and three neighbors (Cole, Maya, and Clara) have six zodiac years to grow a thriving commercial district on Harbor Syndicate. Most $GOLD after Year 6 wins.</p>
+      <ol>
+        <li><strong>Receive.</strong> Choose from your glowing offered addresses (${KEEP.join(', ')} plots in years 1 to 6) and draw shop tiles (5 in year 1, then 4 each year).</li>
+        <li><strong>Trade.</strong> Bargain freely with neighbors using $GOLD cash, empty plots, built shops, and unused shop tiles. A 1% micro-fee on $GOLD cash transfers feeds the Staking Vault.</li>
+        <li><strong>Build.</strong> Place shop tiles onto your own empty plots for free. Drag from the rack or tap a plot for the quick build menu.</li>
+        <li><strong>Payday & $GOLD Flywheel.</strong> Connected shops of the same type and stool color pay $GOLD every year (boosted 1.20x when you stake 500 $GOLD in the Hub).</li>
+      </ol>
+      <h3>Annual Storefront Yield Table</h3>
+      <table><thead><tr><th>Connected Tiles</th><th>Growing Group</th><th>Complete Set</th></tr></thead><tbody>${[1, 2, 3, 4, 5, 6].map((n) => `<tr><td>${n}</td><td>${n === 6 ? 'n/a' : INCOMPLETE[n] + ' $GOLD'}</td><td>${n >= 3 ? COMPLETE[n] + ' $GOLD' : 'n/a'}</td></tr>`).join('')}</tbody></table>
+      <p class="rules-note">Casual Mode requires zero $GOLD to enter and awards Town Points swappable for $GOLD (3% burn). Ranked Mode pools 4,000 $GOLD (90% podium, 5% burned to 0x…dEaD, 5% to Staking Vault).</p>
+      <p class="rules-note" style="margin-top:6px"><a href="/docs" target="_blank" rel="noopener">Full Web Game &amp; $GOLD Docs (/docs) ↗</a> · <a href="/changelog" target="_blank" rel="noopener">Changelog &amp; Release Feed (/changelog) ↗</a></p>
+      <button class="primary wide" data-action="close">Back to Harbor Tycoon</button>`,
+      'HOW TO PLAY · HARBOR TYCOON',
+    );
+  }
+
+  function incomeModal() {
+    const yrEvt = getYearMarketEvent(state);
+    const myBd = incomeBreakdown(state, 0, isStaked());
+    modal(
+      'This year $GOLD earnings.',
+      `<p>Every business in the neighborhood has paid its owner (${yrEvt.icon} <strong>${escape(yrEvt.title)}</strong>: ${escape(yrEvt.shortTag)}).</p><p class="muted" style="font-size:12px;margin-top:-4px">Your Breakdown: Storefronts +${myBd.shopBase} $GOLD · Zodiac Event +${myBd.zodiacBonus} $GOLD · Guild Majorities +${myBd.districtBonus} $GOLD${isStaked() ? ' · 1.20x Staked Boost' : ''}.</p>${state.players.map((p, i) => `<div class="score-row">${token(i)}<span>${i === 0 ? 'You' : escape(p.name)}</span><strong>+${money(state.lastIncome[i] ?? 0)}</strong><span class="muted">Total ${p.cash} $GOLD</span></div>`).join('')}<div class="modal-actions"><button class="primary" data-action="${state.phase === 'ended' ? 'results' : 'next'}">${state.phase === 'ended' ? 'Final standings' : 'Begin year ' + (state.year + 1)} →</button></div>`,
+      phaseName('income'),
+    );
+  }
+
+  function buildCurrentScoreCardPayload(): ScoreCardPayload {
+    return {
+      state,
+      stakedBoost: isStaked(),
+      walletAddress: currentRealWeb3Address(),
+      verifiedWallet: isCurrentWalletVerified(),
+      verifiedTxCount: walletStats?.me?.verifiedTxCount ?? 0,
+      streakDays: walletStats?.me?.currentStreakDays ?? 1,
+      dailyRank: walletStats?.me?.dailyRank ?? null,
+    };
+  }
+
+  function settleMatchFlywheelIfNeeded(rankedOrder: number[]) {
+    if (state.matchSettled) return null;
+    state.matchSettled = true;
+    const bonusPoints = Math.max(50, state.players[0].cash);
+    townPoints += bonusPoints;
+    let rankedPayout = 0;
+    let burned = 0;
+    if (state.entryMode === 'ranked') {
+      const pool = calculateMatchPayouts(DEFAULT_FLYWHEEL_CONFIG.buyInAmount, rankedOrder);
+      flywheel = applyMatchPayouts(flywheel, pool);
+      rankedPayout = pool.payouts[0] ?? 0;
+      burned = pool.burnedAmount;
+      if (rankedPayout > 0) adjustActiveWalletBalance(rankedPayout);
+    }
+    void reportCompletedMatch({
+      address: currentRealWeb3Address(),
+      finalNetWorthWif: state.players[0].cash,
+      won: rankedOrder[0] === 0,
+      burnedWif: burned,
+      entryMode: state.entryMode ?? 'casual',
+      dailySeed: state.dailySeed ?? null,
+      playerName: wallet.getState().account?.name ?? 'Trader',
+    }).then((summary) => {
+      if (summary) {
+        walletStats = summary;
+        walletStatsOffline = false;
+        if (summary.streakBonusPoints && summary.streakBonusPoints > 0) {
+          townPoints += summary.streakBonusPoints;
+          saveEconomy();
+          toast(
+            `🔥 ${summary.streakDays ?? summary.me?.currentStreakDays ?? 2}-day Harbor Streak! +${summary.streakBonusPoints} bonus Town Points!`,
+          );
+        }
+      }
+    });
+    save();
+    return { bonusPoints, rankedPayout, burned };
+  }
+
+  function results() {
+    const ranked = rankings(state),
+      top = ranked[0].cash,
+      topTiles = state.lots.filter((l) => l.owner === ranked[0].id && l.shop !== null).length,
+      winners = ranked.filter(
+        (p) =>
+          p.cash === top &&
+          state.lots.filter((l) => l.owner === p.id && l.shop !== null).length === topTiles,
+      );
+    const settlement = settleMatchFlywheelIfNeeded(ranked.map((p) => p.id));
+    const swapPreview = calculatePointSwap(townPoints);
+    const scoreCardDataUrl = renderEmpireScoreCardDataUrl(buildCurrentScoreCardPayload());
+
+    modal(
+      winners.length > 1
+        ? 'A shared neighborhood victory!'
+        : ranked[0].id === 0
+          ? 'Harbor Tycoon is yours!'
+          : `${escape(ranked[0].name)} wins the six-year crown!`,
+      `<div class="results-split-grid">
+        <div class="results-left-col">
+          <p class="results-subcopy">All six zodiac paydays counted on Harbor Syndicate${state.entryMode === 'daily' && state.dailySeed ? ` · Daily Seed <code>${escape(state.dailySeed)}</code>` : ''}.</p>
+          <div class="results-podium-list">
+            ${ranked
+              .map((p, i) => {
+                const shopCount = state.lots.filter((l) => l.owner === p.id && l.shop !== null).length;
+                const annualYield = income(state, p.id, p.id === 0 && isStaked());
+                return `<div class="score-row ${winners.some((w) => w.id === p.id) ? 'winner' : ''}"><span>${i + 1}</span>${token(p.id)}<span class="score-row-name">${p.id === 0 ? 'You' : escape(p.name)}<small>${shopCount} shops · +${annualYield} $GOLD/yr</small></span><strong>${money(p.cash)}</strong></div>`;
+              })
+              .join('')}
+          </div>
+          <div class="wif-hub-section results-settlement-card">
+            <h3>$GOLD Flywheel Settlement</h3>
+            <p>${
+              state.entryMode === 'ranked'
+                ? `Ranked 4,000 $GOLD Pool settled: 200 $GOLD burned, 200 $GOLD to Staking Vault.${settlement && settlement.rankedPayout > 0 ? ` You won +${settlement.rankedPayout.toLocaleString('en-US')} $GOLD!` : ''}`
+                : `Earned Town Points from your ${state.players[0].cash} $GOLD empire! Redeemable: ${townPoints} pts (+${swapPreview.netWif} $GOLD net, ${swapPreview.burnedWif} $GOLD burned).`
+            }</p>
+            <div class="wif-row-actions">
+              <button type="button" class="secondary" data-action="wif-hub">Open $GOLD Hub</button>
+              <button type="button" class="secondary" data-action="open-traders-board">🏆 Harbor Leaderboard</button>
+            </div>
+          </div>
+        </div>
+        <div class="results-right-col">
+          ${
+            scoreCardDataUrl
+              ? `<div class="score-card-box">
+                  <img class="score-card-preview" src="${scoreCardDataUrl}" alt="Harbor Tycoon Year 6 Empire Score Card" />
+                  <div class="wif-row-actions" style="justify-content:center;margin-top:8px">
+                    <button type="button" class="primary" data-action="download-score-card">📸 Download PNG</button>
+                    <button type="button" class="secondary" data-action="share-score-x">𝕏 Share on X</button>
+                    ${
+                      resolveActiveHarborVaultAddress()
+                        ? `<button type="button" class="secondary" data-action="anchor-match-onchain">⛓️ Anchor Score On-Chain</button>`
+                        : ''
+                    }
+                  </div>
+                </div>`
+              : ''
+          }
+          <p class="muted results-footnote">Completed ${state.trades} OTC deals · +${income(state, 0, isStaked())} $GOLD/yr in Year 6.</p>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="secondary" data-action="close">Explore the town</button><button class="primary" data-action="new">Play again</button></div>`,
+      'SIX YEARS · FINAL $GOLD STANDINGS',
+    );
+    get('#modal').classList.add('results-dialog');
+  }
+
+  function shopEntry(g: ShopGroup, index: number) {
+    const shop = SHOPS[g.shop],
+      target = shop.size,
+      completed = Math.floor(g.size / target),
+      remainder = g.size % target,
+      earned = groupIncome(g.shop, g.size);
+    return `<article class="ledger-entry"><div class="entry-illustration">${sprite('shops', SPRITES[g.shop])}<span>${String(index + 1).padStart(2, '0')}</span></div><div class="entry-writing"><div class="entry-title"><h3>${shop.name}</h3><strong>${earned}<small> $GOLD/yr</small></strong></div><p class="entry-address">${DISTRICTS[Math.floor(g.lots[0] / 12)]} · Plots ${g.lots.map((x) => x + 1).join(', ')}</p><div class="entry-progress"><span>${g.size} / ${target} connected</span><span class="ink-stamp ${completed ? 'complete' : ''}">${completed ? 'COMPLETE' : 'GROWING'}</span></div><p class="entry-note">${completed ? `${completed} complete set${completed > 1 ? 's' : ''}${remainder ? ' + ' + remainder + ' extra tiles' : ''}.` : `Add ${target - g.size} matching connected tile${target - g.size > 1 ? 's' : ''} to earn ${COMPLETE[target]} $GOLD/year.`}</p></div></article>`;
+  }
+
+  function businesses(page = 0) {
+    const all = groups(state, 0),
+      count = Math.max(1, Math.ceil(all.length / 6));
+    ledgerPage = Math.max(0, Math.min(count - 1, page));
+    const start = ledgerPage * 6,
+      spread = all.slice(start, start + 6),
+      left = spread.slice(0, 3),
+      right = spread.slice(3),
+      bd = incomeBreakdown(state, 0, isStaked()),
+      total = bd.total,
+      majorities = getPlayerDistrictMajorities(state, 0),
+      yrEvt = getYearMarketEvent(state);
+    const majorityLine =
+      majorities.length > 0
+        ? `🏛️ Guild Majority Seals: ${majorities.map((d) => DISTRICTS[d]).join(', ')} (+${bd.districtBonus} $GOLD/yr)`
+        : 'Claim 6+ plots in any district to earn its +15 $GOLD/yr Guild Majority Seal.';
+    modal(
+      'Your shop ledger',
+      `<div class="ledger-binding"><span class="book-ribbon" aria-hidden="true"></span><div class="book-spread"><section class="book-page left-page"><div class="page-heading"><span>HARBOR TYCOON</span><span>YEAR ${state.year}</span></div>${ledgerPage === 0 ? `<div class="ledger-book-title"><small>THE NEIGHBORHOOD ACCOUNTS</small><h2>Your shop ledger</h2><p>Storefronts, street addresses & annual $GOLD yield</p></div>` : `<h2 class="ledger-continuation">The accounts continue…</h2>`}${left.map((g, i) => shopEntry(g, start + i)).join('') || `<div class="empty-ledger">${sprite('shops', 'coffee')}<h3>A blank page. A new beginning.</h3><p>Open a shop on one of your plots. Its street address and annual $GOLD income will be recorded here.</p></div>`}<span class="page-number">${ledgerPage * 2 + 1}</span></section><section class="book-page right-page"><div class="page-heading"><span>BUSINESS INCOME</span><span>Ledger 01</span></div>${right.map((g, i) => shopEntry(g, start + 3 + i)).join('')}${right.length < 3 ? `<div class="book-margin-note"><strong>${yrEvt.icon} ${escape(yrEvt.title)}</strong><p>${escape(yrEvt.summary)}</p><p>${escape(majorityLine)}</p></div>` : ''}<div class="ledger-tally"><span>ALL YOUR SHOPS · EACH YEAR${isStaked() ? ' (1.20X STAKED)' : ''}</span><strong>${total}<small> $GOLD</small></strong><div>${all.length} business groups · +${bd.zodiacBonus} Zodiac · +${bd.districtBonus} Guild Seal</div></div><div class="ledger-signature">Recorded on Harbor Syndicate</div><span class="page-number">${ledgerPage * 2 + 2}</span></section></div></div><nav class="book-navigation" aria-label="Ledger pages"><button data-action="ledger-prev" class="book-tab" ${ledgerPage === 0 ? 'disabled' : ''}>← Previous</button><span>${ledgerPage + 1} / ${count}</span><button data-action="ledger-next" class="book-tab" ${ledgerPage === count - 1 ? 'disabled' : ''}>Next →</button></nav>`,
+      'THE SHOPKEEPER LEDGER',
+    );
+    get('#modal').classList.add('ledger-dialog');
+  }
+
+  function startFreshSession() {
+    clearTimeout(autoPlayTimer);
+    autoPlayTimer = undefined;
+    autoPlaySpeed = 0;
+    if (selectedEntryMode === 'ranked') {
+      const ok = adjustActiveWalletBalance(-DEFAULT_FLYWHEEL_CONFIG.buyInAmount);
+      if (!ok) {
+        toast('Need at least 1,000 $GOLD in wallet for Ranked Arena. Switch wallet or play Casual.');
+        return;
+      }
+      toast('1,000 $GOLD buy-in locked! 4,000 $GOLD Ranked Arena pot is live.');
+    }
+    const seedKey =
+      selectedEntryMode === 'daily'
+        ? challengeSeedOverride || getTodayHarborSeedKey()
+        : undefined;
+    if (selectedEntryMode === 'daily' && seedKey) {
+      toast(`📅 Daily Harbor Seed ${seedKey} loaded! Same 6-year draws for every trader today.`);
+    }
+    cancelAnimationFrame(cashFrame);
+    payout = null;
+    get('#effects').innerHTML = '';
+    state = newGame(Math.random, selectedEntryMode, seedKey);
+    liveBotFeed =
+      selectedEntryMode === 'daily' && seedKey
+        ? `Daily Seed ${seedKey}: You, Cole, Maya & Clara opened identical harbor draws`
+        : 'Year 1 (Snake): You, Cole, Maya & Clara pulled up stools at the table';
+    observedPhase = '';
+    selectedLot = null;
+    selectedShop = null;
+    chosen = [];
+    freshLots = [];
+    cameraInitialized = false;
+    cameraScale = null;
+    rackOpen = false;
+    view = 'play';
+    menuOpen = false;
+    sessionStarted = true;
+    closeModal();
+    changed();
+    requestAnimationFrame(() => {
+      $('.map-viewport')?.focus({ preventScroll: true });
+      showPhase();
+    });
+  }
+
+  function act(action: string | undefined, el?: HTMLElement) {
+    const data = el?.dataset ?? {};
+    switch (action) {
+      case 'close':
+        closeModal();
+        break;
+      case 'play':
+        view = 'play';
+        gameMenu();
+        break;
+      case 'select-entry':
+        selectedEntryMode =
+          data.entryMode === 'ranked'
+            ? 'ranked'
+            : data.entryMode === 'daily'
+              ? 'daily'
+              : 'casual';
+        renderStartMenu();
+        break;
+      case 'launch-daily-seed':
+        selectedEntryMode = 'daily';
+        startFreshSession();
+        break;
+      case 'resume':
+        if (!assetsReady) return;
+        void gameAudio.unlock();
+        if (!hasProgress()) {
+          startFreshSession();
+          return;
+        }
+        menuOpen = false;
+        sessionStarted = true;
+        view = 'play';
+        render();
+        requestAnimationFrame(() => {
+          $('.map-viewport')?.focus({ preventScroll: true });
+          showPhase();
+        });
+        break;
+      case 'retry-assets':
+        void warmAssets();
+        break;
+      case 'research':
+        closeModal();
+        menuOpen = false;
+        get('#start-screen').hidden = true;
+        document.body.classList.remove('menu-open');
+        view = 'research';
+        render();
+        window.scrollTo({ top: 0 });
+        break;
+      case 'set-view': {
+        const mode = data.viewMode;
+        if (mode === '2d' || mode === 'tabletop-3d' || mode === 'city-3d') {
+          setViewMode(mode);
+        }
+        break;
+      }
+      case 'view-toggle':
+        toggleViewMode();
+        break;
+      case 'cycle-view': {
+        const order: BoardViewMode[] = ['2d', 'tabletop-3d', 'city-3d'];
+        setViewMode(order[(order.indexOf(viewMode) + 1) % order.length]);
+        audioSettings();
+        break;
+      }
+      case 'set-3d-preset': {
+        const preset = data.preset as CameraPresetMode | undefined;
+        if (
+          preset === 'neighborhood' ||
+          preset === 'isometric' ||
+          preset === 'street' ||
+          preset === 'topdown'
+        ) {
+          cameraPreset3D = preset;
+          board3D?.setCameraPreset(preset);
+          $('.three-city-stage')
+            ?.querySelectorAll<HTMLButtonElement>('button[data-action="set-3d-preset"]')
+            .forEach((btn) => {
+              btn.classList.toggle('active', btn.dataset.preset === cameraPreset3D);
+            });
+        }
+        break;
+      }
+      case 'reset-3d-camera':
+        cameraPreset3D = 'isometric';
+        board3D?.resetCamera();
+        board3D?.setCameraPreset('isometric');
+        $('.three-city-stage')
+          ?.querySelectorAll<HTMLButtonElement>('button[data-action="set-3d-preset"]')
+          .forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.preset === 'isometric');
+          });
+        break;
+      case 'set-3d-atmo': {
+        const atmo = data.atmo as CityAtmosphereMode | undefined;
+        if (atmo === 'day' || atmo === 'sunset' || atmo === 'night') {
+          atmosphere3D = atmo;
+          board3D?.setAtmosphere(atmo);
+          try {
+            localStorage.setItem(ATMO_3D_KEY, atmo);
+          } catch {}
+          $('.three-city-stage')
+            ?.querySelectorAll<HTMLButtonElement>('button[data-action="set-3d-atmo"]')
+            .forEach((btn) => {
+              btn.classList.toggle('active-atmo', btn.dataset.atmo === atmosphere3D);
+            });
+        }
+        break;
+      }
+      case 'toggle-3d-touch-mode': {
+        touchDragMode3D = touchDragMode3D === 'pan' ? 'orbit' : 'pan';
+        board3D?.setTouchDragMode(touchDragMode3D);
+        ensure3DCityMounted();
+        toast(
+          touchDragMode3D === 'pan'
+            ? '1-finger touch: Pan across streets (2 fingers zoom and rotate)'
+            : '1-finger touch: Orbit 3D camera (2 fingers zoom and pan)',
+        );
+        break;
+      }
+      case 'toggle-mobile-zen': {
+        mobileZenMode = !mobileZenMode;
+        render();
+        break;
+      }
+      case 'toggle-ipod':
+        ipodOpen = !ipodOpen;
+        render();
+        break;
+      case 'wif-hub':
+        openWifHub();
+        break;
+      case 'open-traders-board':
+        openTradersBoard();
+        break;
+      case 'whats-new':
+        openWhatsNewModal(
+          data.tab === 'forecast' || data.tab === 'feeds' || data.tab === 'highlights'
+            ? data.tab
+            : 'highlights',
+        );
+        break;
+      case 'set-whats-new-tab':
+        if (
+          data.tab === 'highlights' ||
+          data.tab === 'forecast' ||
+          data.tab === 'feeds'
+        ) {
+          openWhatsNewModal(data.tab);
+        }
+        break;
+      case 'copy-feed-url': {
+        const feedUrl = (data.url || '').trim();
+        if (feedUrl && navigator.clipboard?.writeText) {
+          void navigator.clipboard.writeText(feedUrl).then(() => {
+            toast(`📋 Copied ${feedUrl} to clipboard!`);
+          });
+        } else if (feedUrl) {
+          toast(`URL: ${feedUrl}`);
+        }
+        break;
+      }
+      case 'copy-daily-seed-link': {
+        const todaySeed = walletStats?.todaySeed ?? getTodayHarborSeedKey();
+        const originUrl =
+          typeof window !== 'undefined' && window.location?.origin
+            ? window.location.origin
+            : 'https://harbor-tycoon-production.up.railway.app';
+        const challengeUrl = `${originUrl}/?daily=${encodeURIComponent(todaySeed)}&target=650`;
+        if (navigator.clipboard?.writeText) {
+          void navigator.clipboard.writeText(challengeUrl).then(() => {
+            toast(`🔗 Copied Daily Seed (${todaySeed}) Challenge Link to clipboard!`);
+          });
+        } else {
+          toast(`Challenge Link: ${challengeUrl}`);
+        }
+        break;
+      }
+      case 'set-traders-tab':
+        if (
+          data.tab === 'leaderboard' ||
+          data.tab === 'daily' ||
+          data.tab === 'recent' ||
+          data.tab === 'verify'
+        ) {
+          openTradersBoard(data.tab);
+        }
+        break;
+      case 'verify-wallet-sig':
+        void verifyActiveWalletOwnership();
+        break;
+      case 'verify-onchain-tx':
+        void verifyOnChainTxHashInteractive();
+        break;
+      case 'refresh-wallet-stats':
+        refreshWalletStats();
+        toast('Refreshing live Harbor Wallet Registry…');
+        break;
+      case 'select-sim-wallet':
+        if (data.address) {
+          const targetAddress = data.address;
+          void wallet.setMode('simulation').then(async () => {
+            await wallet.switchAccount(targetAddress);
+            saveEconomy();
+            openWifHub();
+            render();
+          });
+        }
+        break;
+      case 'connect-mainnet-wif':
+        void connectMetaMaskQuick();
+        break;
+      case 'select-eip6963-wallet': {
+        const rdns = (data.rdns || '').trim();
+        if (rdns && wallet.selectEip6963Provider(rdns)) {
+          toast(`Selected wallet provider: ${rdns}. Connecting to Harbor Syndicate (4663)…`);
+          void connectMetaMaskQuick();
+        }
+        break;
+      }
+      case 'watch-wif-asset': {
+        void wallet
+          .watchMainnetWifAsset()
+          .then((added) => {
+            toast(
+              added
+                ? '✓ Added World is Flat ($GOLD) token to your wallet!'
+                : 'Token watch prompt closed.',
+            );
+          })
+          .catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'Connect a Web3 wallet first.');
+          });
+        break;
+      }
+      case 'stake-mainnet-vault': {
+        const vaultAddr = resolveActiveHarborVaultAddress();
+        void wallet
+          .stakeMainnetVaultWif(10, vaultAddr)
+          .then((tx) => {
+            lastMainnetTxHash = tx.hash;
+            stakedWif = Math.max(500, stakedWif);
+            saveEconomy();
+            toast('⛓️ Staked 10 $GOLD in RobinTownHarborVault! 1.20x Payday Boost active.');
+            void waitAndVerifyOnChainTx({
+              address: currentRealWeb3Address(),
+              txHash: tx.hash,
+            }).then((verified) => {
+              if (verified) {
+                walletStats = verified;
+                if (verified.bonusTownPoints > 0) townPoints += verified.bonusTownPoints;
+                saveEconomy();
+              } else {
+                refreshWalletStats();
+              }
+            });
+            if (get('#modal').dataset.wifHub === 'true') openWifHub();
+            render();
+          })
+          .catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'Vault stake transaction cancelled.');
+          });
+        break;
+      }
+      case 'unstake-mainnet-vault': {
+        const vaultAddr = resolveActiveHarborVaultAddress();
+        void wallet
+          .unstakeMainnetVaultWif(10, vaultAddr)
+          .then((tx) => {
+            lastMainnetTxHash = tx.hash;
+            stakedWif = 0;
+            saveEconomy();
+            toast('⛓️ Unstaked 10 $GOLD from RobinTownHarborVault.');
+            if (get('#modal').dataset.wifHub === 'true') openWifHub();
+            render();
+          })
+          .catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'Vault unstake transaction cancelled.');
+          });
+        break;
+      }
+      case 'anchor-match-onchain': {
+        const vaultAddr = resolveActiveHarborVaultAddress();
+        const seedDigits =
+          state.entryMode === 'daily' && state.dailySeed
+            ? Number(state.dailySeed.replace(/-/g, ''))
+            : 0;
+        const bestWorth = Math.max(
+          1,
+          Math.round(state.players[0]?.cash || walletStats?.me?.bestNetWorthWif || 150),
+        );
+        const districtsWon = getPlayerDistrictMajorities(state, 0).length;
+        void wallet
+          .anchorMatchOnChain(
+            Number.isFinite(seedDigits) ? seedDigits : 0,
+            bestWorth,
+            districtsWon,
+            vaultAddr,
+          )
+          .then((tx) => {
+            lastMainnetTxHash = tx.hash;
+            saveEconomy();
+            toast(
+              `⛓️ Anchored ${bestWorth.toLocaleString('en-US')} $GOLD on Harbor Syndicate (4663) & minted RTOWN Reputation!`,
+            );
+            void waitAndVerifyOnChainTx({
+              address: currentRealWeb3Address(),
+              txHash: tx.hash,
+            })
+              .then((verified) => {
+                if (verified) {
+                  walletStats = verified;
+                  if (verified.bonusTownPoints > 0) townPoints += verified.bonusTownPoints;
+                  saveEconomy();
+                } else {
+                  refreshWalletStats();
+                }
+                if (get('#modal').dataset.wifHub === 'true') openWifHub();
+                render();
+              })
+              .catch(() => {
+                refreshWalletStats();
+              });
+          })
+          .catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'On-chain match anchor cancelled.');
+          });
+        break;
+      }
+      case 'send-room-ping': {
+        const pingText = (data.ping || '').trim();
+        if (!pingText || !activeRoom || !activeRoomCode) break;
+        const senderName = activeRoom.getLocalPlayer()?.name || 'You';
+        sendCustomRoomPacket('TOWN_CHAT_PING', {
+          senderName,
+          text: pingText,
+        });
+        liveBotFeed = `Room ${activeRoomCode} · You: ${pingText}`;
+        playSound('tap');
+        toast(`Sent to Room ${activeRoomCode}: ${pingText}`);
+        render();
+        break;
+      }
+      case 'burn-mainnet-wif': {
+        const burnAmt = Math.max(0.01, Number(data.amount || '0.1'));
+        void wallet
+          .burnMainnetWif(burnAmt)
+          .then((tx) => {
+            lastMainnetTxHash = tx.hash;
+            flywheel = { ...flywheel, totalBurned: Number((flywheel.totalBurned + burnAmt).toFixed(2)) };
+            communityVotes += 1;
+            saveEconomy();
+            toast(`Burned ${burnAmt} $GOLD on Harbor Syndicate! Verifying on-chain receipt…`);
+            void waitAndVerifyOnChainTx({
+              address: currentRealWeb3Address(),
+              txHash: tx.hash,
+            })
+              .then((verified) => {
+                if (!verified) {
+                  refreshWalletStats();
+                  return;
+                }
+                walletStats = verified;
+                walletStatsOffline = false;
+                if (verified.bonusTownPoints > 0) townPoints += verified.bonusTownPoints;
+                saveEconomy();
+                toast(
+                  `⛓️ On-chain receipt verified: ${verified.wifMoved} $GOLD (+${verified.bonusTownPoints} pts)!`,
+                );
+                if (get('#modal').dataset.wifHub === 'true') openWifHub();
+                if (get('#modal').dataset.tradersBoard === 'true') openTradersBoard();
+                render();
+              })
+              .catch(() => {
+                refreshWalletStats();
+              });
+            if (get('#modal').dataset.wifHub === 'true') openWifHub();
+            render();
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : 'On-chain $GOLD burn cancelled.';
+            toast(msg);
+          });
+        break;
+      }
+      case 'patronize-mainnet-wif': {
+        void wallet
+          .patronizeMainnetWif(10)
+          .then((tx) => {
+            lastMainnetTxHash = tx.hash;
+            flywheel = {
+              ...flywheel,
+              totalStakingYield: Number((flywheel.totalStakingYield + 10).toFixed(2)),
+            };
+            saveEconomy();
+            toast('Patronized Harbor Vault with 10 $GOLD! Verifying Harbor Vault receipt…');
+            void waitAndVerifyOnChainTx({
+              address: currentRealWeb3Address(),
+              txHash: tx.hash,
+            })
+              .then((verified) => {
+                if (!verified) {
+                  refreshWalletStats();
+                  return;
+                }
+                walletStats = verified;
+                walletStatsOffline = false;
+                if (verified.bonusTownPoints > 0) townPoints += verified.bonusTownPoints;
+                saveEconomy();
+                toast('🏛️ 1.20x On-Chain Patron Boost unlocked on Robinhood Harbor Vault!');
+                if (get('#modal').dataset.wifHub === 'true') openWifHub();
+                render();
+              })
+              .catch(() => {
+                refreshWalletStats();
+              });
+            if (get('#modal').dataset.wifHub === 'true') openWifHub();
+            render();
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : 'On-chain Harbor Patron tx cancelled.';
+            toast(msg);
+          });
+        break;
+      }
+      case 'copy-onchain-tx':
+        if (lastMainnetTxHash && navigator.clipboard) {
+          void navigator.clipboard.writeText(lastMainnetTxHash).then(() => {
+            toast(`Copied tx hash ${lastMainnetTxHash!.slice(0, 12)}…`);
+          });
+        }
+        break;
+      case 'connect-web3':
+        void wallet.setMode('web3').then(async () => {
+          await wallet.connect();
+          const st = wallet.getState();
+          if (st.status !== 'connected') {
+            wallet.setMode('simulation');
+            toast('No browser Web3 wallet detected. Using instant Simulation Wallet.');
+          } else {
+            toast(`Connected to ${ROBINHOOD_CHAIN_NAME}!`);
+            if (st.account && !st.account.isSimulated) {
+              await syncConnectedWeb3Wallet(st.account.address, st.chainId ?? ROBINHOOD_CHAIN_ID);
+            }
+          }
+          saveEconomy();
+          if (get('#modal').dataset.wifHub === 'true') openWifHub();
+          render();
+        });
+        break;
+      case 'toggle-stake':
+        if (stakedWif >= 500) {
+          adjustActiveWalletBalance(500);
+          stakedWif = 0;
+          toast('Unstaked 500 $GOLD from Vault.');
+        } else {
+          if (!adjustActiveWalletBalance(-500)) {
+            toast('Need 500 $GOLD in active wallet to activate 1.20x Staking Boost.');
+            break;
+          }
+          stakedWif = 500;
+          toast('Staked 500 $GOLD! All your annual shop paydays now earn 1.20x $GOLD.');
+        }
+        saveEconomy();
+        openWifHub();
+        render();
+        break;
+      case 'swap-points': {
+        const res = calculatePointSwap(townPoints);
+        if (res.netWif <= 0) {
+          toast('Earn at least 20 Town Points to swap for $GOLD.');
+          break;
+        }
+        flywheel = applyPointSwap(flywheel, res);
+        townPoints = 0;
+        adjustActiveWalletBalance(res.netWif);
+        saveEconomy();
+        toast(`Swapped points for +${res.netWif} $GOLD (${res.burnedWif} $GOLD burned to 0x…dEaD)!`);
+        openWifHub();
+        render();
+        break;
+      }
+      case 'vote-burn':
+        if (!adjustActiveWalletBalance(-100, true)) {
+          toast('Need 100 $GOLD in wallet to cast a Community Burn Vote.');
+          break;
+        }
+        communityVotes += 1;
+        flywheel = { ...flywheel, totalBurned: flywheel.totalBurned + 100 };
+        saveEconomy();
+        toast('🔥 100 $GOLD permanently burned for Harbor Tycoon Community Vote!');
+        openWifHub();
+        render();
+        break;
+      case 'refresh-onchain':
+        refreshOnChainProof();
+        toast('Querying live Harbor Syndicate RPC for $GOLD contract state…');
+        break;
+      case 'create-room': {
+        const code = generateRoomCode();
+        const wAcc = wallet.getState().account;
+        const room = new NetworkRoom({
+          roomCode: code,
+          isHost: true,
+          localPlayer: {
+            name: wAcc?.name ?? 'You',
+            address: wAcc?.address ?? '0x1000000000000000000000000000000000000001',
+          },
+        });
+        bindRoomSession(room, code);
+        toast(`Online Multiplayer Room ${code} created! Share the code or invite link.`);
+        openWifHub();
+        break;
+      }
+      case 'join-room': {
+        const input = $('#join-room-input') as HTMLInputElement | null;
+        const code = normalizeRoomCode(input?.value ?? '');
+        if (!isValidRoomCode(code)) {
+          toast('Enter a valid 6-character alphanumeric room code.');
+          break;
+        }
+        const wAcc = wallet.getState().account;
+        const room = new NetworkRoom({
+          roomCode: code,
+          isHost: false,
+          localPlayer: {
+            name: wAcc?.name ?? 'Trader',
+            address: wAcc?.address ?? '0x1000000000000000000000000000000000000001',
+          },
+        });
+        bindRoomSession(room, code);
+        toast(`Connecting to Online Room ${code}…`);
+        openWifHub();
+        break;
+      }
+      case 'copy-room-link': {
+        if (!activeRoomCode) break;
+        const url = `${window.location.origin}/?room=${activeRoomCode}`;
+        void navigator.clipboard?.writeText(url).catch(() => {});
+        toast(`Copied invite link: ${url}`);
+        break;
+      }
+      case 'toggle-room-ready': {
+        if (!activeRoom) break;
+        activeRoom.toggleReady();
+        openWifHub();
+        break;
+      }
+      case 'refresh-open-rooms':
+        refreshOpenRooms();
+        toast('Refreshing open public multiplayer tables…');
+        break;
+      case 'quick-join-room': {
+        const code = normalizeRoomCode(data.room ?? '');
+        if (!isValidRoomCode(code)) break;
+        const wAcc = wallet.getState().account;
+        const room = new NetworkRoom({
+          roomCode: code,
+          isHost: false,
+          localPlayer: {
+            name: wAcc?.name ?? 'Trader',
+            address: wAcc?.address ?? '0x1000000000000000000000000000000000000001',
+          },
+        });
+        bindRoomSession(room, code);
+        toast(`Joined Room ${code}! Waiting for host or live board sync…`);
+        openWifHub();
+        break;
+      }
+      case 'accept-pvp-trade': {
+        if (!incomingHumanProposal) {
+          closeModal();
+          break;
+        }
+        const prop = incomingHumanProposal;
+        incomingHumanProposal = null;
+        const mySeat = getLocalRoomSeat();
+        const authState = mySeat === 0 ? state : perspectiveSwapState(state, mySeat);
+        const applied = executeAcceptedPlayerTrade(
+          authState,
+          prop.fromSeat,
+          prop.toSeat,
+          prop.give,
+          prop.take,
+        );
+        if (applied.accepted) {
+          state = mySeat === 0 ? authState : perspectiveSwapState(authState, mySeat);
+          townPoints += 15;
+          if (applied.taxAmount > 0) recordTradeTaxToVault(applied.taxAmount, 1);
+          sendCustomRoomPacket('TOWN_TRADE_RESPOND', {
+            proposalId: prop.proposalId,
+            fromSeat: prop.fromSeat,
+            accepted: true,
+            responderName: activeRoom?.getLocalPlayer()?.name || 'Neighbor',
+            taxAmount: applied.taxAmount,
+          });
+          closeModal();
+          playSound('deal');
+          toast(`✓ Deal settled with ${prop.fromName}!`);
+          changed();
+        } else {
+          sendCustomRoomPacket('TOWN_TRADE_RESPOND', {
+            proposalId: prop.proposalId,
+            fromSeat: prop.fromSeat,
+            accepted: false,
+            responderName: activeRoom?.getLocalPlayer()?.name || 'Neighbor',
+            taxAmount: 0,
+          });
+          closeModal();
+          toast('That offer is no longer available on the current board.');
+        }
+        break;
+      }
+      case 'decline-pvp-trade': {
+        if (incomingHumanProposal) {
+          const prop = incomingHumanProposal;
+          incomingHumanProposal = null;
+          sendCustomRoomPacket('TOWN_TRADE_RESPOND', {
+            proposalId: prop.proposalId,
+            fromSeat: prop.fromSeat,
+            accepted: false,
+            responderName: activeRoom?.getLocalPlayer()?.name || 'Neighbor',
+            taxAmount: 0,
+          });
+          playSound('reject');
+          toast(`Declined deal from ${prop.fromName}.`);
+        }
+        closeModal();
+        break;
+      }
+      case 'coachmark-autopick':
+        chosen = chooseSmartDraftPlots(state);
+        playSound('place');
+        render();
+        toast(`Selected ${chosen.length} connected harbor addresses! Click Keep Plots to confirm.`);
+        break;
+      case 'skip-tutorial':
+        markTutorialComplete();
+        render();
+        break;
+      case 'download-score-card': {
+        const ok = downloadEmpireScoreCard(buildCurrentScoreCardPayload());
+        toast(ok ? 'Downloaded 1200×630 Score Card PNG!' : 'Score Card preview ready above.');
+        break;
+      }
+      case 'share-score-x': {
+        const shareUrl = buildEmpireXShareUrl(buildCurrentScoreCardPayload());
+        window.open(shareUrl, '_blank', 'noopener,noreferrer');
+        break;
+      }
+      case 'start-online-room': {
+        if (!activeRoom) break;
+        try {
+          activeRoom.startMatch();
+        } catch {
+          // Even if a remote guest has not toggled ready yet, allow launching immediately
+        }
+        startFreshSession();
+        toast(`Launched Online Room ${activeRoomCode ?? ''}!`);
+        break;
+      }
+      case 'rules':
+        rules();
+        break;
+      case 'sound':
+        gameAudio.setSfx(!gameAudio.getSettings().sfx);
+        void gameAudio.unlock().then(() => playSound());
+        toast(gameAudio.getSettings().sfx ? '♪ Tap sounds on' : 'Tap sounds off');
+        break;
+      case 'music':
+        gameAudio.setMusic(!gameAudio.getSettings().music);
+        void gameAudio.unlock();
+        toast(
+          gameAudio.getSettings().music
+            ? '♫ Harbor Tycoon lo-fi radio on'
+            : 'Music off',
+        );
+        syncIPodDock();
+        break;
+      case 'guide':
+        if (get('#modal').open) closeModal();
+        showPhase(true);
+        break;
+      case 'dismiss-phase':
+        dismissPhase();
+        updateGuides();
+        break;
+      case 'menu':
+        gameMenu();
+        break;
+      case 'settings':
+      case 'audio-settings':
+        audioSettings();
+        break;
+      case 'rack':
+        rackOpen = !rackOpen;
+        render();
+        break;
+      case 'years':
+        yearBook();
+        break;
+      case 'year-info': {
+        const y = Math.max(1, Math.min(6, Number(data.year) || state.year)),
+          z = ZODIAC[y - 1],
+          evt = getYearMarketEvent(state, y);
+        modal(
+          `Year ${y} · ${z[0]}`,
+          `<div class="zodiac-detail">${zodiacSprite(y - 1)}<p>The year of the ${z[1].toLowerCase()}.</p></div><div class="zodiac-event-pill" style="margin:8px 0">${evt.icon} <strong>${escape(evt.title)}</strong> · ${escape(evt.shortTag)}</div><p>${escape(evt.summary)}</p><p class="muted" style="font-size:12px">${y === state.year ? 'Active right now on your neighborhood board.' : y < state.year ? 'This zodiac year is complete.' : 'Finish the current year to turn the next calendar page.'}</p><div class="year-rewards"><strong>${KEEP[y - 1]} <small>new plots</small></strong><span>+</span><strong>${y === 1 ? 5 : 4} <small>shop pieces</small></strong></div>`,
+          'ZODIAC YEAR & HARBOR MARKET EVENT',
+        );
+        break;
+      }
+      case 'player-info':
+        playerInfo(Number(data.player));
+        break;
+      case 'glance-shop': {
+        const id = Number(data.player),
+          shop = Number(data.shopIndex);
+        if (id === 0) {
+          closeModal();
+          selectedShop = shop;
+          selectedLot = null;
+          rackOpen = true;
+          render();
+          if (state.phase !== 'build') toast('You can place this piece during Build.');
+        } else if (state.phase === 'trade') {
+          partner = id;
+          openTrade(null, shop);
+        } else playerInfo(id);
+        break;
+      }
+      case 'inspect-player-lot': {
+        const id = Number(data.id);
+        closeModal();
+        if (state.phase === 'trade' && state.lots[id].owner !== 0) openTrade(id);
+        else {
+          selectedLot = id;
+          render();
+          focusLot(id);
+        }
+        break;
+      }
+      case 'trade-player':
+        partner = Number(data.player);
+        openTrade();
+        break;
+      case 'claim': {
+        const ownedBefore = new Set(state.lots.filter((l) => l.owner !== null).map((l) => l.id));
+        const claimed = [...chosen];
+        claimPlots(state, chosen);
+        const botNew = state.lots
+          .filter((l) => l.owner !== null && l.owner !== 0 && !ownedBefore.has(l.id))
+          .map((l) => l.id);
+        freshLots = [...claimed, ...botNew];
+        chosen = [];
+        selectedLot = null;
+        townPoints += 10;
+        liveBotFeed = `Year ${state.year}: You claimed ${claimed.length} plots · Cole, Maya & Clara claimed ${botNew.length} corners`;
+        changed();
+        scheduleFreshClear();
+        playSound('build');
+        toast('Addresses claimed! Cole, Maya & Clara placed their stools too.');
+        break;
+      }
+      case 'trade':
+        openTrade();
+        break;
+      case 'smart-trade':
+        if (state.phase !== 'trade') {
+          toast('Trading opens right after you claim your addresses.');
+        } else if (trading.openSmart) {
+          trading.openSmart();
+        } else {
+          openTrade();
+        }
+        break;
+      case 'smart-build-one': {
+        if (state.phase !== 'build') {
+          toast('Building starts right after bargaining.');
+          break;
+        }
+        const nextSmart = findNextSmartBuild(state);
+        if (!nextSmart) {
+          toast('No matching empty plots or shop tiles left to place right now.');
+          break;
+        }
+        buildPiece(nextSmart.id, nextSmart.shop);
+        focusLot(nextSmart.id);
+        break;
+      }
+      case 'trade-lot':
+        openTrade(Number(data.id));
+        break;
+      case 'build':
+        modal(
+          'All deals done for this year?',
+          `<p>Starting Build closes the Bargaining Table for Year ${state.year}. Placed storefronts are permanent.</p><div class="modal-actions"><button class="secondary" data-action="close">Keep bargaining</button><button class="primary" data-action="confirm-build">Open the shops →</button></div>`,
+          phaseName('build'),
+        );
+        break;
+      case 'confirm-build': {
+        const botRound = botTradeRound(state);
+        if (botRound.totalTax > 0) {
+          recordTradeTaxToVault(botRound.totalTax, botRound.deals.length);
+        }
+        beginBuild(state);
+        selectedLot = null;
+        selectedShop = null;
+        closeModal();
+        if (botRound.deals.length > 0) {
+          liveBotFeed = `Neighbor Deals: ${botRound.deals.map((d) => d.summary).join(' · ')}`;
+          toast(`${botRound.deals[0].summary}. Time to build!`);
+        } else {
+          liveBotFeed = `Year ${state.year} Build: Cole, Maya & Clara are ready to open storefronts`;
+        }
+        changed();
+        break;
+      }
+      case 'quick-build': {
+        const id = Number(data.id),
+          shop = Number(data.index);
+        if (state.lots[id].shop === null) buildPiece(id, shop);
+        else {
+          selectedShop = shop;
+          selectedLot = null;
+          render();
+          toast('Tap one of your empty plots next to this business.');
+        }
+        break;
+      }
+      case 'place':
+        if (selectedLot !== null && selectedShop !== null) buildPiece(selectedLot, selectedShop);
+        break;
+      case 'deselect':
+        selectedLot = null;
+        render();
+        break;
+      case 'collect': {
+        const possible = holdings(state, 0).some((l) =>
+          SHOPS.some((_, s) => canPlace(state, 0, l.id, s)),
+        );
+        if (possible)
+          modal(
+            'Collect this year $GOLD payday?',
+            `<p>You still have empty plots and matching shop tiles in your rack. Unused tiles carry over to next year, or you can open more shops right now.</p><div class="modal-actions"><button class="secondary" data-action="close">Keep building</button><button class="primary" data-action="confirm-collect">Collect $GOLD income</button></div>`,
+          );
+        else act('confirm-collect');
+        break;
+      }
+      case 'confirm-collect': {
+        const built = new Set(state.lots.filter((l) => l.shop !== null).map((l) => l.id)),
+          cash = state.players.map((p) => p.cash);
+        finishYear(state, isStaked());
+        townPoints += Math.max(15, Math.floor((state.lastIncome[0] ?? 0) / 2));
+        const newShops = state.lots.filter((l) => l.shop !== null && !built.has(l.id)).map((l) => l.id);
+        freshLots = newShops;
+        liveBotFeed = `Year ${state.year} Payday: Bots opened ${newShops.length} shops · Cole +${state.lastIncome[1]}, Maya +${state.lastIncome[2]}, Clara +${state.lastIncome[3]} $GOLD`;
+        selectedLot = null;
+        selectedShop = null;
+        closeModal();
+        changed();
+        scheduleFreshClear();
+        celebratePayday(cash);
+        break;
+      }
+      case 'toggle-fast-play': {
+        if (autoPlaySpeed > 0) {
+          setAutoPlaySpeed(0);
+        } else {
+          if (state.phase === 'ended') {
+            startFreshSession();
+          }
+          setAutoPlaySpeed(3);
+        }
+        break;
+      }
+      case 'cycle-fast-speed': {
+        const nextSpeed: FastPlaySpeed =
+          autoPlaySpeed === 1 ? 3 : autoPlaySpeed === 3 ? 8 : 1;
+        setAutoPlaySpeed(nextSpeed);
+        break;
+      }
+      case 'stop-fast-play': {
+        setAutoPlaySpeed(0);
+        break;
+      }
+      case 'launch-fast-play': {
+        if (!assetsReady) return;
+        void gameAudio.unlock();
+        if (!hasProgress() || state.phase === 'ended') {
+          startFreshSession();
+        } else {
+          menuOpen = false;
+          sessionStarted = true;
+          view = 'play';
+          render();
+        }
+        setAutoPlaySpeed(3);
+        break;
+      }
+      case 'income':
+        incomeModal();
+        break;
+      case 'next': {
+        cancelAnimationFrame(cashFrame);
+        payout = null;
+        get('#effects').innerHTML = '';
+        nextYear(state);
+        chosen = [];
+        selectedLot = null;
+        selectedShop = null;
+        closeModal();
+        changed();
+        break;
+      }
+      case 'results':
+        results();
+        break;
+      case 'businesses':
+        businesses();
+        break;
+      case 'ledger-prev':
+        businesses(ledgerPage - 1);
+        playSound('place');
+        break;
+      case 'ledger-next':
+        businesses(ledgerPage + 1);
+        playSound('place');
+        break;
+      case 'history':
+        modal(
+          'The Harbor Tycoon Journal',
+          `<ul class="history">${state.logs.map((l) => `<li>${escape(l)}</li>`).join('')}</ul>`,
+        );
+        break;
+      case 'new':
+        if (!assetsReady) {
+          toast('Let the Aseprite artwork finish loading first.');
+          break;
+        }
+        modal(
+          'Start a fresh six-year town?',
+          `<p>This replaces your current town progress in ${
+            selectedEntryMode === 'ranked'
+              ? 'Ranked 1,000 $GOLD Arena'
+              : selectedEntryMode === 'daily'
+                ? `Daily Harbor Seed (${getTodayHarborSeedKey()})`
+                : 'Casual Free Mode'
+          }.</p><div class="modal-actions"><button class="secondary" data-action="close">Keep current town</button><button class="primary" data-action="confirm-new">Start fresh town</button></div>`,
+        );
+        break;
+      case 'confirm-new':
+        startFreshSession();
+        break;
+    }
+  }
+
+  const FAST_PLAY_SAFE_ACTIONS = new Set([
+    'toggle-fast-play',
+    'cycle-fast-speed',
+    'stop-fast-play',
+    'launch-fast-play',
+    'set-3d-preset',
+    'reset-3d-camera',
+    'set-3d-atmo',
+    'toggle-3d-touch-mode',
+    'toggle-mobile-zen',
+    'view-toggle',
+    'set-view',
+    'sound',
+    'music',
+    'toggle-ipod',
+    'dismiss-phase',
+    'copy-room-link',
+  ]);
+
+  function preserveControlFocus(el: HTMLElement) {
+    if (!keyboardNavigation || document.activeElement !== document.body) return;
+    if (
+      el.dataset.action === 'glance-shop' &&
+      el.dataset.player !== undefined &&
+      el.dataset.shopIndex !== undefined
+    ) {
+      document
+        .querySelector<HTMLElement>(
+          `[data-action="glance-shop"][data-player="${el.dataset.player}"][data-shop-index="${el.dataset.shopIndex}"]`,
+        )
+        ?.focus({ preventScroll: true });
+      return;
+    }
+    for (const attr of ['data-lot', 'data-shop', 'data-action'])
+      if (el.hasAttribute(attr)) {
+        document
+          .querySelector<HTMLElement>(`[${attr}="${el.getAttribute(attr)}"]`)
+          ?.focus({ preventScroll: true });
+        break;
+      }
+  }
+
+  document.addEventListener('click', (e) => {
+    if (eventElement(e)?.closest('.robin-ipod-scale') || eventElement(e)?.closest('.apple-carousel')) {
+      return;
+    }
+    if (
+      eventElement(e)?.closest<HTMLElement>('.map-viewport') &&
+      (mapInput.blocksClick || performance.now() < mapTapBlockUntil)
+    ) {
+      e.preventDefault();
+      return;
+    }
+    if (suppressClick) {
+      suppressClick = false;
+      e.preventDefault();
+      return;
+    }
+    const barter = eventElement(e)?.closest<HTMLElement>('[data-bargain]');
+    if (barter) {
+      if (autoPlaySpeed > 0) setAutoPlaySpeed(0, true);
+      trading.handle(barter);
+      return;
+    }
+    const el = eventElement(e)?.closest<HTMLElement>('[data-action],[data-lot],[data-shop]');
+    if (!el || el.hasAttribute('disabled')) return;
+    try {
+      if (
+        autoPlaySpeed > 0 &&
+        (el.dataset.lot !== undefined ||
+          el.dataset.shop !== undefined ||
+          (el.dataset.action !== undefined && !FAST_PLAY_SAFE_ACTIONS.has(el.dataset.action)))
+      ) {
+        setAutoPlaySpeed(0, true);
+      }
+      playSound('tap');
+      if (el.dataset.lot !== undefined) {
+        clickLot(Number(el.dataset.lot));
+        if (el.classList.contains('address-slip')) focusLot(Number(el.dataset.lot));
+      } else if (el.dataset.shop !== undefined) {
+        dismissPhase();
+        const shop = Number(el.dataset.shop);
+        selectedShop = selectedShop === shop ? null : shop;
+        selectedLot = null;
+        if (selectedShop !== null && state.phase === 'build' && lastInputType === 'touch')
+          rackOpen = false;
+        render();
+        if (state.phase !== 'build') toast('Keep this piece in mind for Build.');
+        else if (state.players[0].tiles[shop] === 0) toast('You have none of this piece.');
+      } else act(el.dataset.action, el);
+      preserveControlFocus(el);
+    } catch (error) {
+      toast(errorMessage(error));
+    }
+  });
+
+  function clearDrop() {
+    document
+      .querySelectorAll<HTMLElement>('.drop-target')
+      .forEach((l) => l.classList.remove('drop-target'));
+    board3D?.setDropTargetLot(null);
+  }
+
+  function cancelDrag() {
+    drag = null;
+    get('#drag-piece').className = '';
+    get('#drag-piece').innerHTML = '';
+    document.body.classList.remove('dragging');
+    clearDrop();
+  }
+
+  function cancelMapGesture() {
+    const ids = [...mapInput.points.keys()],
+      vp = $('.map-viewport'),
+      consumed = mapInput.clear(true);
+    if (consumed) mapTapBlockUntil = performance.now() + 450;
+    for (const id of ids)
+      try {
+        if (vp?.hasPointerCapture(id)) vp.releasePointerCapture(id);
+      } catch {}
+  }
+
+  function mapPoint(e: MouseEvent, vp: HTMLElement) {
+    const r = vp.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function applyMapCamera(next: Camera) {
+    cameraScale = next.scale;
+    cameraCenter = { x: next.x, y: next.y };
+    fitMap();
+  }
+
+  document.addEventListener(
+    'wheel',
+    (e) => {
+      if (viewMode === 'city-3d') return;
+      const vp = eventElement(e)?.closest?.<HTMLElement>('.map-viewport');
+      if (!vp || menuOpen || get('#modal').open) return;
+      if (e.cancelable) e.preventDefault();
+      if (drag || mapInput.blocksClick || !Number.isFinite(e.deltaY) || e.deltaY === 0) return;
+      if (!camera) fitMap();
+      if (!camera) return;
+      $('.game-world')
+        ?.getAnimations()
+        .forEach((a) => a.cancel());
+      applyMapCamera(
+        wheelCamera(vp.clientWidth, vp.clientHeight, camera, mapPoint(e, vp), e.deltaY, e.deltaMode),
+      );
+    },
+    { passive: false },
+  );
+
+  document.addEventListener('pointerdown', (e) => {
+    if (menuOpen || get('#modal').open || e.button !== 0) return;
+    if (eventElement(e)?.closest('.robin-ipod-card') || eventElement(e)?.closest('.three-city-stage')) {
+      return;
+    }
+    const vp = eventElement(e)?.closest<HTMLElement>('.map-viewport');
+    if (vp) {
+      if (drag) return;
+      if (!mapInput.blocksClick) mapTapBlockUntil = 0;
+      if (!camera) fitMap();
+      if (!camera) return;
+      if (
+        mapInput.down(e.pointerId, mapPoint(e, vp), { ...camera }, vp.clientWidth, vp.clientHeight)
+      ) {
+        $('.game-world')
+          ?.getAnimations()
+          .forEach((a) => a.cancel());
+        if (mapInput.active) {
+          mapTapBlockUntil = performance.now() + 450;
+          for (const id of mapInput.points.keys())
+            try {
+              vp.setPointerCapture(id);
+            } catch {}
+        }
+      }
+      return;
+    }
+    if (drag || mapInput.points.size || e.pointerType !== 'mouse') return;
+    const shop = eventElement(e)?.closest<HTMLElement>('[data-drag-shop]'),
+      counter = eventElement(e)?.closest<HTMLElement>('[data-drag-token]');
+    let type: PieceDrag['type'] | null = null,
+      index = 0;
+    if (
+      shop &&
+      state.phase === 'build' &&
+      state.players[0].tiles[Number(shop.dataset.dragShop)] > 0
+    ) {
+      type = 'shop';
+      index = Number(shop.dataset.dragShop);
+    } else if (counter && state.phase === 'receive') {
+      type = 'counter';
+      index = 0;
+    }
+    const source = shop || counter;
+    if (type && source)
+      drag = {
+        type,
+        index,
+        el: source,
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        active: false,
+      };
+  });
+
+  document.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!mapInput.points.has(e.pointerId)) return;
+      const vp = $('.map-viewport');
+      if (!vp) {
+        cancelMapGesture();
+        return;
+      }
+      const next = mapInput.move(e.pointerId, mapPoint(e, vp));
+      if (!next) return;
+      if (e.cancelable) e.preventDefault();
+      mapTapBlockUntil = performance.now() + 450;
+      try {
+        vp.setPointerCapture(e.pointerId);
+      } catch {}
+      applyMapCamera(next);
+    },
+    { passive: false },
+  );
+
+  document.addEventListener('pointerup', (e) => {
+    if (!mapInput.points.has(e.pointerId) && !mapInput.ignored.has(e.pointerId)) return;
+    const vp = $('.map-viewport');
+    if (camera && mapInput.up(e.pointerId, { ...camera })) mapTapBlockUntil = performance.now() + 450;
+    try {
+      if (vp?.hasPointerCapture(e.pointerId)) vp.releasePointerCapture(e.pointerId);
+    } catch {}
+  });
+
+  document.addEventListener('pointercancel', (e) => {
+    if (mapInput.points.has(e.pointerId) || mapInput.ignored.has(e.pointerId)) {
+      if (camera) mapInput.up(e.pointerId, { ...camera });
+      cancelMapGesture();
+    }
+  });
+
+  document.addEventListener('lostpointercapture', (e) => {
+    if (eventElement(e)?.matches?.('.map-viewport') && mapInput.points.has(e.pointerId))
+      cancelMapGesture();
+  });
+
+  window.addEventListener('blur', () => {
+    cancelMapGesture();
+    mapInput.clear();
+  });
+  window.addEventListener('resize', cancelMapGesture);
+
+  document.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x,
+        dy = e.clientY - drag.y;
+      if (!drag.active && Math.hypot(dx, dy) < 6) return;
+      if (!drag.active) {
+        drag.active = true;
+        try {
+          drag.el.setPointerCapture(e.pointerId);
+        } catch {}
+        document.body.classList.add('dragging');
+        if (drag.type === 'shop') {
+          selectedShop = drag.index;
+          document
+            .querySelectorAll<HTMLElement>('.lot')
+            .forEach((l) =>
+              l.classList.toggle(
+                'buildable',
+                canPlace(state, 0, Number(l.dataset.lot), selectedShop ?? -1),
+              ),
+            );
+        }
+        get('#drag-piece').innerHTML =
+          drag.type === 'shop' ? sprite('shops', SPRITES[drag.index]) : token(0);
+        get('#drag-piece').className = 'show' + (drag.type === 'counter' ? ' token-drag' : '');
+      }
+      if (e.cancelable) e.preventDefault();
+      get('#drag-piece').style.left = e.clientX + 'px';
+      get('#drag-piece').style.top = e.clientY + 'px';
+      clearDrop();
+      if (viewMode === 'city-3d' && board3D) {
+        const id3d = board3D.pickLotAtClientPoint(e.clientX, e.clientY);
+        if (id3d !== null) {
+          const valid =
+            drag.type === 'counter'
+              ? state.pending.includes(id3d)
+              : canPlace(state, 0, id3d, drag.index);
+          board3D.setDropTargetLot(valid ? id3d : null);
+        }
+      } else {
+        const target = document
+          .elementFromPoint(e.clientX, e.clientY)
+          ?.closest<HTMLElement>('[data-lot]');
+        if (target) {
+          const id = Number(target.dataset.lot),
+            valid =
+              drag.type === 'counter'
+                ? state.pending.includes(id)
+                : canPlace(state, 0, id, drag.index);
+          if (valid) target.classList.add('drop-target');
+        }
+      }
+    },
+    { passive: false },
+  );
+
+  document.addEventListener('pointerup', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const ended = drag;
+    const id3d =
+      viewMode === 'city-3d' && board3D
+        ? board3D.pickLotAtClientPoint(e.clientX, e.clientY)
+        : null;
+    const target =
+      viewMode === 'city-3d'
+        ? null
+        : document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-lot]');
+    cancelDrag();
+    if (!ended.active) return;
+    suppressClick = true;
+    setTimeout(() => (suppressClick = false), 250);
+    try {
+      const resolvedId = id3d !== null ? id3d : target ? Number(target.dataset.lot) : null;
+      if (resolvedId === null) {
+        render();
+        return;
+      }
+      const id = resolvedId;
+      if (ended.type === 'counter') {
+        if (!state.pending.includes(id)) toast('Place your stool on one of the glowing addresses.');
+        else if (chosen.includes(id)) toast('You already placed a stool here.');
+        else clickLot(id);
+      } else if (canPlace(state, 0, id, ended.index)) buildPiece(id, ended.index);
+      else {
+        toast('That shop needs one of your empty addresses.');
+        render();
+      }
+    } catch (error) {
+      toast(errorMessage(error));
+      render();
+    }
+  });
+
+  document.addEventListener('pointercancel', () => {
+    if (drag?.active) {
+      cancelDrag();
+      render();
+    } else cancelDrag();
+  });
+
+  window.addEventListener('blur', () => {
+    if (drag) {
+      cancelDrag();
+      render();
+    }
+  });
+
+  window.addEventListener('resize', fitMap);
+
+  let keyboardNavigation = false;
+  document.addEventListener(
+    'keydown',
+    () => {
+      keyboardNavigation = true;
+    },
+    { capture: true },
+  );
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      keyboardNavigation = false;
+      lastInputType = e.pointerType;
+    },
+    { capture: true, passive: true },
+  );
+  document.addEventListener('focusin', (e) => {
+    const lot = eventElement(e)?.closest<HTMLElement>('[data-lot]'),
+      vp = $('.map-viewport');
+    if (!keyboardNavigation || !lot || !vp?.contains(lot)) return;
+    requestAnimationFrame(() => {
+      if (!lot.isConnected || document.activeElement !== lot) return;
+      vp.scrollLeft = 0;
+      vp.scrollTop = 0;
+      focusLot(Number(lot.dataset.lot));
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const modal = $('#modal') as HTMLDialogElement | null;
+    if (modal?.open || menuOpen) return;
+    if (e.key === 'v' || e.key === 'V') {
+      const activeEl = document.activeElement;
+      const isInput =
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true');
+      if (!isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        toggleViewMode();
+        return;
+      }
+    }
+    if (e.key === 'f' || e.key === 'F') {
+      const activeEl = document.activeElement;
+      const isInput =
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true');
+      if (!isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        act('toggle-fast-play');
+        return;
+      }
+    }
+    if (e.key === 'Escape') {
+      if (autoPlaySpeed > 0) setAutoPlaySpeed(0);
+      dismissPhase();
+      cancelDrag();
+      selectedShop = null;
+      selectedLot = null;
+      if (ipodOpen) ipodOpen = false;
+      render();
+    }
+    const vp = $('.map-viewport');
+    if (!vp || !vp.contains(eventElement(e)) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (['+', '=', '-', '0'].includes(e.key)) {
+      e.preventDefault();
+      if (drag || mapInput.blocksClick) return;
+      if (!camera) fitMap();
+      if (!camera) return;
+      $('.game-world')
+        ?.getAnimations()
+        .forEach((a) => a.cancel());
+      const w = vp.clientWidth,
+        h = vp.clientHeight;
+      applyMapCamera(
+        e.key === '0'
+          ? cameraFor(w, h, { x: 550, y: 365 }, null, desktopMap() ? 'contain' : 'cover')
+          : wheelCamera(w, h, camera, { x: w / 2, y: h / 2 }, e.key === '-' ? 100 : -100),
+      );
+    } else if (
+      e.target === vp &&
+      ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
+    ) {
+      e.preventDefault();
+      cameraCenter = dragCamera(
+        camera ?? cameraFor(vp.clientWidth, vp.clientHeight),
+        e.key === 'ArrowLeft' ? 45 : e.key === 'ArrowRight' ? -45 : 0,
+        e.key === 'ArrowUp' ? 45 : e.key === 'ArrowDown' ? -45 : 0,
+      );
+      fitMap();
+    }
+  });
+
+  function sizeOverlays() {
+    const vv = window.visualViewport,
+      height = vv?.height || window.innerHeight;
+    document.documentElement.style.setProperty('--available-height', height + 'px');
+    document.documentElement.style.setProperty(
+      '--dialog-center',
+      (vv?.offsetTop || 0) + height / 2 + 'px',
+    );
+  }
+  window.visualViewport?.addEventListener('resize', sizeOverlays);
+  window.visualViewport?.addEventListener('scroll', sizeOverlays);
+  window.addEventListener('resize', sizeOverlays);
+  sizeOverlays();
+
+  document.addEventListener('change', (e) => {
+    if (e.target instanceof HTMLInputElement && e.target.matches('[data-bargain-cash]'))
+      trading.cashChanged(e.target);
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target instanceof HTMLInputElement && e.target.matches('[data-bargain-cash]'))
+      trading.cashChanged(e.target, false);
+  });
+  get('#modal').addEventListener('cancel', () => trading.dismiss());
+  get('#modal').addEventListener('close', () => {
+    if (!get('#modal').open) trading.cancel();
+  });
+  get('#modal').addEventListener('click', (e) => {
+    if (e.target === $('#modal')) {
+      const r = get('#modal').getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
+        closeModal();
+    }
+  });
+
+  for (const event of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'])
+    document.addEventListener(
+      event,
+      (e) => {
+        if (event === 'pointerdown' && e instanceof PointerEvent && e.pointerType !== 'mouse') return;
+        const s = gameAudio.getSettings();
+        if (s.sfx || s.music) void gameAudio.unlock();
+      },
+      { capture: true, passive: true },
+    );
+
+  installMobileGuards();
+  get('#phase-cue').addEventListener('pointerenter', () => clearTimeout(phaseTimer));
+  get('#phase-cue').addEventListener('focusin', () => clearTimeout(phaseTimer));
+  get('#phase-cue').addEventListener('pointerleave', () => {
+    if (get('#phase-cue').classList.contains('show')) phaseTimer = setTimeout(dismissPhase, 4500);
+  });
+
+  render();
+  save();
+  void warmAssets();
+  refreshOnChainProof();
+  refreshWalletStats();
+
+  wallet.subscribe((wState) => {
+    const addr =
+      wState.mode === 'web3' && wState.account && !wState.account.isSimulated
+        ? wState.account.address.trim().toLowerCase()
+        : '';
+    if (addr && addr !== lastReportedWeb3Address) {
+      void syncConnectedWeb3Wallet(
+        wState.account!.address,
+        wState.chainId ?? ROBINHOOD_MAINNET_CHAIN_ID,
+      );
+    }
+  });
+
+  // Auto-join cross-device online room or pre-load Daily Seed / Beat-My-Score challenge from URL
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlDaily = (searchParams.get('daily') ?? '').trim();
+    const rawTarget = Number(searchParams.get('target') ?? '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(urlDaily)) {
+      challengeSeedOverride = urlDaily;
+      selectedEntryMode = 'daily';
+    }
+    if (Number.isFinite(rawTarget) && rawTarget > 0 && rawTarget <= 250_000) {
+      challengeTargetWif = Math.round(rawTarget);
+    }
+    if (challengeSeedOverride || challengeTargetWif !== null) {
+      if (menuOpen) renderStartMenu();
+      else render();
+    }
+
+    const urlRoom = normalizeRoomCode(searchParams.get('room') ?? '');
+    if (isValidRoomCode(urlRoom)) {
+      const wAcc = wallet.getState().account;
+      const room = new NetworkRoom({
+        roomCode: urlRoom,
+        isHost: false,
+        localPlayer: {
+          name: wAcc?.name && wAcc.name !== 'Alice' ? wAcc.name : 'Bob',
+          address: wAcc?.address ?? '0x2000000000000000000000000000000000000002',
+        },
+      });
+      bindRoomSession(room, urlRoom);
+      setTimeout(() => {
+        openWifHub();
+        toast(`Joined Online Room ${urlRoom} via invite link!`);
+      }, 450);
+    } else if (searchParams.get('news') === '1' || searchParams.get('whatsnew') === '1') {
+      setTimeout(() => {
+        openWhatsNewModal();
+      }, 250);
+    }
+  } catch {}
+
+  if (layoutUpdated && state.lots.some((l) => l.owner !== null))
+    setTimeout(
+      () =>
+        toast(
+          'The neighborhood map is ready. Your street addresses and $GOLD balances are preserved.',
+        ),
+      700,
+    );
+
+  registerGameTools({
+    getState: () => state,
+    claim: (ids) => {
+      claimPlots(state, ids);
+      chosen = [];
+      changed();
+    },
+    startBuild: () => {
+      beginBuild(state);
+      selectedShop = null;
+      selectedLot = null;
+      changed();
+    },
+    buildPiece,
+    act,
+    changed,
+    playSound,
+    speak: gameAudio.speak,
+    onTradeTax: (taxAmount) => {
+      flywheel = {
+        ...flywheel,
+        totalStakingYield: flywheel.totalStakingYield + taxAmount,
+        totalTradesTaxed: flywheel.totalTradesTaxed + 1,
+      };
+      saveEconomy();
+    },
+  });
+}

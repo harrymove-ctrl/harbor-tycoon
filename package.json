@@ -1,0 +1,39 @@
+{
+  "name": "harbor-tycoon",
+  "version": "1.5.0",
+  "private": true,
+  "type": "module",
+  "description": "Harbor Tycoon: 3D Harbor Diorama and 2D street negotiation board game with AI Merchant Rivals, Daily Zodiac Seeds, and live WebSocket multiplayer.",
+  "scripts": {
+    "start": "node scripts/serve-prod.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run typecheck && npm run verify:assets && vite build",
+    "contract:compile": "node scripts/compile-contract.mjs",
+    "contract:test": "forge test -vvv",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:unit": "node --import tsx --test tests/unit/**/*.test.ts",
+    "test:e2e": "node --import tsx --test tests/e2e/**/*.test.ts",
+    "test:e2e:tier1": "node --import tsx --test tests/e2e/tier1-features.test.ts",
+    "test:e2e:tier2": "node --import tsx --test tests/e2e/tier2-boundaries.test.ts",
+    "test:e2e:tier3": "node --import tsx --test tests/e2e/tier3-pairwise.test.ts",
+    "test:e2e:tier4": "node --import tsx --test tests/e2e/tier4-scenarios.test.ts",
+    "test:e2e:tier5": "node --import tsx --test tests/e2e/tier5-adversarial.test.ts",
+    "test:adversarial": "node --import tsx scripts/adversarial-stress.ts",
+    "generate:assets": "node --import tsx scripts/generate-assets.ts",
+    "generate:english-assets": "node --import tsx scripts/generate-english-saigon-assets.ts",
+    "verify:assets": "node --import tsx scripts/verify-assets.ts",
+    "verify:browser": "NODE_PATH=/Users/harryphan/.npm/_npx/e41f203b7505f1fb/node_modules node --import tsx scripts/verify-browser-e2e.ts",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.186.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}
