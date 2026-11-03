@@ -41,13 +41,13 @@ export function EndLockup() {
               <div
                 style={{
                   fontFamily: BUNGEE,
-                  fontSize: 108,
+                  fontSize: 96,
                   lineHeight: 1,
                   color: PALETTE.brandWordmarkGold,
                   letterSpacing: "0.03em",
                 }}
               >
-                ROBIN <span style={{ color: PALETTE.accentEmerald }}>TOWN</span>
+                HARBOR <span style={{ color: PALETTE.accentEmerald }}>TYCOON</span>
               </div>
             </div>
 
@@ -59,8 +59,9 @@ export function EndLockup() {
                 color: C.ink,
               }}
             >
-              Build with <span style={{ color: PALETTE.accentGold }}>$wif</span> on Robinhood Chain ·{" "}
-              <span style={{ color: PALETTE.accentMintPill }}>Chain ID 46631</span>
+              Bargain for corners, build shop chains, and grow{" "}
+              <span style={{ color: PALETTE.accentGold }}>$GOLD</span> ·{" "}
+              <span style={{ color: PALETTE.accentMintPill }}>AI Merchant Engine</span>
             </div>
 
             <div
@@ -85,7 +86,7 @@ export function EndLockup() {
                   color: PALETTE.parchmentLight,
                 }}
               >
-                github.com/harrymove-ctrl/robin-town
+                harbor-tycoon-production.up.railway.app
               </div>
               <div
                 style={{
@@ -99,7 +100,7 @@ export function EndLockup() {
                   color: PALETTE.accentMintPill,
                 }}
               >
-                $ npm install &amp;&amp; npm run dev
+                github.com/harrymove-ctrl/harbor-tycoon
               </div>
             </div>
           </div>

@@ -1,3 +1,4 @@
+node_modules
 node_modules/
 dist/
 .agents/
@@ -5,6 +6,7 @@ dist/
 *.log
 .env
 .env.*
+video/node_modules
 video/node_modules/
 video/out/
 video/public/

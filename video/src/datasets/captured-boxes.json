@@ -2,80 +2,80 @@
   "boxes": {
     "C1": {
       "x": 422,
-      "y": 297,
+      "y": 295,
       "w": 806,
-      "h": 435
+      "h": 440
     },
     "viewToggleBtn": {
-      "x": 1286,
-      "y": 32,
-      "w": 103,
-      "h": 31
+      "x": 1240,
+      "y": 14,
+      "w": 108,
+      "h": 42
     },
     "C2": {
-      "x": 1395,
-      "y": 32,
+      "x": 1171,
+      "y": 30,
       "w": 152,
       "h": 30
     },
     "X1": {
-      "x": 1286,
-      "y": 32,
-      "w": 103,
-      "h": 31
+      "x": 1240,
+      "y": 14,
+      "w": 108,
+      "h": 42
     },
     "C3": {
-      "x": 536,
-      "y": 452,
-      "w": 389,
+      "x": 456,
+      "y": 493,
+      "w": 469,
       "h": 56
     },
     "proposeBtn": {
-      "x": 1252,
-      "y": 855,
+      "x": 1332,
+      "y": 916,
       "w": 145,
       "h": 44
     },
     "C4": {
-      "x": 523,
+      "x": 443,
       "y": 465,
-      "w": 874,
+      "w": 1034,
       "h": 77
     },
     "collectBtn": {
       "x": 1678,
-      "y": 1022,
+      "y": 1025,
       "w": 158,
       "h": 44
     },
     "C5": {
-      "x": 759,
-      "y": 407,
-      "w": 402,
-      "h": 158
+      "x": 712,
+      "y": 405,
+      "w": 497,
+      "h": 163
     },
     "C6": {
-      "x": 593,
-      "y": 245,
-      "w": 734,
-      "h": 247
+      "x": 573,
+      "y": 337,
+      "w": 382,
+      "h": 264
     },
     "stakeBtn": {
-      "x": 606,
-      "y": 566,
-      "w": 297,
+      "x": 978,
+      "y": 493,
+      "w": 205,
       "h": 44
     },
     "C7": {
-      "x": 593,
-      "y": 633,
-      "w": 734,
-      "h": 139
+      "x": 573,
+      "y": 611,
+      "w": 382,
+      "h": 172
     },
     "X2": {
-      "x": 593,
-      "y": 174,
-      "w": 734,
+      "x": 573,
+      "y": 265,
+      "w": 774,
       "h": 58
     },
     "C8": {
@@ -84,38 +84,38 @@
       "w": 240,
       "h": 395
     },
-    "I1": {
-      "x": 422,
-      "y": 297,
-      "w": 806,
-      "h": 435
-    },
     "I2": {
       "x": 594,
       "y": 332,
       "w": 731,
       "h": 72
+    },
+    "I1": {
+      "x": 422,
+      "y": 295,
+      "w": 806,
+      "h": 440
     }
   },
   "events": {
-    "clip01Start": 5.136,
-    "clip01Toggle": 19.205,
-    "clip01Draft": 27.337,
-    "clip02Start": 3.428,
-    "clip02Propose": 15.935,
-    "clip03Start": 2.191,
-    "clip03Collect": 4.192,
-    "realPaydayText": "+240 $wif",
-    "clip04Start": 2.521,
-    "clip04Stake": 10.523,
-    "clip05Start": 1.69,
-    "clip06Start": 1.673
+    "clip01Start": 3.163,
+    "clip01Toggle": 17.165,
+    "clip01Draft": 25.364,
+    "clip02Start": 2.355,
+    "clip02Propose": 14.862,
+    "clip03Start": 1.714,
+    "clip03Collect": 3.715,
+    "realPaydayText": "+304 $GOLD",
+    "clip04Start": 2.082,
+    "clip04Stake": 10.084,
+    "clip05Start": 1.469,
+    "clip06Start": 1.445
   },
   "realFlywheelStats": {
-    "burnedText": "1,524 $wif",
-    "vaultText": "682 $wif",
-    "podiumText": "7,200 $wif",
-    "onChainPillText": "● On-Chain Block #103,099,794 · 4,600,001 $wif burned on 0x…dEaD",
+    "burnedText": "118,329 $GOLD",
+    "vaultText": "682 $GOLD",
+    "podiumText": "9,438 $GOLD",
+    "onChainPillText": "✓ 500 $GOLD Staked (1.20x)",
     "walletAddress": "0x7F4C892B194D33E1A04F289012B59A7C4E1892A4",
     "chainId": 46631
   }

@@ -88,7 +88,7 @@ const INTRO_SHOT_I07: ShotSpec = {
       to: 157,
       side: "right",
       what: "Ranked #1 podium settlement",
-      why: "Win +2,160 $wif while 4.6M+ $wif burns live.",
+      why: "Win +2,160 $GOLD while 116k+ $GOLD burns live.",
       accent: PALETTE.accentGold,
     },
   ],
@@ -146,7 +146,7 @@ function IntroOrbHook() {
   return (
     <SolaceGround>
       <OrbSwarm
-        script="Pull up a stool. | Claim harbor corners. | Bargain $wif. | Build 3D. | Outsmart AI neighbors. | Put $wif to work."
+        script="Pull up a stool. | Claim harbor corners. | Bargain $GOLD. | Build 3D. | Outsmart AI neighbors. | Put $GOLD to work."
         background={PALETTE.bgDeep}
         ink={PALETTE.parchmentLight}
         orbColor={PALETTE.accentEmerald}
@@ -160,7 +160,7 @@ function IntroOrbHook() {
   );
 }
 
-/** I02a (f95..140): @snapcn/block-wordmark + TownMark crest + Chain ID 46631 · 10,000 $wif Ready. */
+/** I02a (f95..140): @snapcn/block-wordmark + TownMark crest + AI Merchant Engine · 10,000 $GOLD Ready. */
 function IntroBrandWordmark() {
   const frame = useCurrentFrame();
   const speed = 2.25;
@@ -170,9 +170,9 @@ function IntroBrandWordmark() {
   return (
     <SolaceGround>
       <BlockWordmark
-        text="ROBIN TOWN"
+        text="HARBOR TYCOON"
         fontFamily={BUNGEE}
-        fontSize={132}
+        fontSize={96}
         color={PALETTE.brandWordmarkGold}
         colors={[...DISTRICT_PALETTE.slice(0, 6)]}
         background="transparent"
@@ -221,9 +221,9 @@ function IntroBrandWordmark() {
             letterSpacing: "0.04em",
           }}
         >
-          <span>● CHAIN ID 46631</span>
+          <span>● AI MERCHANT ENGINE</span>
           <span style={{ color: PALETTE.accentGold }}>·</span>
-          <span style={{ color: PALETTE.parchmentWarm }}>10,000 $WIF READY</span>
+          <span style={{ color: PALETTE.parchmentWarm }}>10,000 $GOLD READY</span>
         </div>
       </AbsoluteFill>
     </SolaceGround>
@@ -238,7 +238,7 @@ function IntroLaptopDive() {
         entrance="open"
         finale="zoom-to-screen"
         showNotch={true}
-        notchLabel="Chain ID 46631 · 10,000 $wif Ready"
+        notchLabel="Harbor Tycoon · 10,000 $GOLD Ready"
         indicatorColor={PALETTE.accentEmerald}
         bezelColor={PALETTE.bgHudDark}
         screenColor={PALETTE.bgCityStage}
@@ -450,9 +450,9 @@ function IntroOtcAndMobileStage() {
 }
 
 const KICK_CARDS = [
-  { at: 0, tag: "YEAR 1 · SNAKE", stat: "+240 $wif", sub: "Connected corner harvest", accent: PALETTE.accentEmerald },
+  { at: 0, tag: "YEAR 1 · SNAKE", stat: "+240 $GOLD", sub: "Connected corner harvest", accent: PALETTE.accentEmerald },
   { at: 23, tag: "YEAR 3 · GOAT", stat: "4-Lot Chain", sub: "District multiplier active", accent: PALETTE.accentGold },
-  { at: 36, tag: "YEAR 5 · ROOSTER", stat: "1.20x Yield", sub: "500 $wif staked on 46631", accent: PALETTE.accentJade },
+  { at: 36, tag: "YEAR 5 · ROOSTER", stat: "1.20x Yield", sub: "500 $GOLD staked in Vault", accent: PALETTE.accentJade },
   { at: 59, tag: "YEAR 6 · DOG", stat: "926 Tests", sub: "120 tiles conserved", accent: PALETTE.accentMintPill },
 ] as const;
 
@@ -592,28 +592,28 @@ function IntroBassKickPayday() {
 const CONSERVATION_BARS = [
   {
     pct: "90%",
-    amount: "3,600 $wif",
+    amount: "3,600 $GOLD",
     label: "Podium Purse (1st 60% · 2nd 25% · 3rd 15%)",
     fill: 0.9,
     color: PALETTE.accentEmerald,
   },
   {
     pct: "5%",
-    amount: "200 $wif",
+    amount: "200 $GOLD",
     label: "Permanently Burned to 0x0000...dEaD",
     fill: 0.34,
     color: PALETTE.accentCoral,
   },
   {
     pct: "5%",
-    amount: "200 $wif",
+    amount: "200 $GOLD",
     label: "Staking Vault (Funds 1.20x Shopkeeper Boost)",
     fill: 0.34,
     color: PALETTE.accentGold,
   },
 ] as const;
 
-/** I06a (f559..612 = 53f): Fast MetricMorph conservation split for Ranked Arena 4,000 $wif Pool. */
+/** I06a (f559..612 = 53f): Fast MetricMorph conservation split for Ranked Arena 4,000 $GOLD Pool. */
 function IntroMetricMorph() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -650,7 +650,7 @@ function IntroMetricMorph() {
               boxShadow: "0 16px 24px rgba(8, 22, 16, 0.72)",
             }}
           >
-            Ranked Arena · <span style={{ color: PALETTE.accentGold }}>4,000 $wif Pool</span>
+            Ranked Arena · <span style={{ color: PALETTE.accentGold }}>4,000 $GOLD Pool</span>
           </div>
         </AbsoluteFill>
       ) : null}
@@ -695,7 +695,7 @@ function IntroMetricMorph() {
                     letterSpacing: "0.08em",
                   }}
                 >
-                  RANKED ARENA CONSERVATION · VERIFIED $WIF 0xE49A1C…0F9B
+                  RANKED ARENA CONSERVATION · HARBOR TREASURY ($GOLD)
                 </div>
                 <div
                   style={{
@@ -706,7 +706,7 @@ function IntroMetricMorph() {
                     color: C.ink,
                   }}
                 >
-                  Zero inflation. Every single $wif accounted for.
+                  Zero inflation. Every single $GOLD accounted for.
                 </div>
               </div>
               <div
@@ -718,7 +718,7 @@ function IntroMetricMorph() {
                   color: PALETTE.accentGold,
                 }}
               >
-                Σ = 4,000 $wif
+                Σ = 4,000 $GOLD
               </div>
             </div>
 
@@ -853,7 +853,7 @@ function IntroWifFlywheelAndTap() {
             letterSpacing: "0.08em",
           }}
         >
-          ● CHAIN ID 46631 · STAKING VAULT
+          ● HARBOR TREASURY · STAKING VAULT
         </div>
         <div
           style={{
@@ -866,7 +866,7 @@ function IntroWifFlywheelAndTap() {
             lineHeight: 1.18,
           }}
         >
-          Lock 500 <span style={{ color: PALETTE.accentGold }}>$wif</span> for{" "}
+          Lock 500 <span style={{ color: PALETTE.accentGold }}>$GOLD</span> for{" "}
           <span style={{ color: PALETTE.accentMintPill }}>1.20x</span> paydays.
         </div>
         <div
@@ -880,7 +880,7 @@ function IntroWifFlywheelAndTap() {
             lineHeight: 1.32,
           }}
         >
-          4,600,001 $wif burned on 0x…dEaD · Play free or connect live.
+          116,805 $GOLD burned in Harbor Treasury · Play free vs AI rivals.
         </div>
       </div>
 
@@ -909,11 +909,11 @@ function IntroWifFlywheelAndTap() {
             color: staked ? PALETTE.accentMintPill : PALETTE.accentGold,
           }}
         >
-          {staked ? "✓ 1.20x SHOPKEEPER BOOST VERIFIED" : "0xE49A1C…0F9B · READY TO STAKE"}
+          {staked ? "✓ 1.20x SHOPKEEPER BOOST VERIFIED" : "HARBOR TREASURY · READY TO STAKE"}
         </div>
       </div>
 
-      {/* Right Column (x: 1320..1868): Live Mobile $wif Hub inside @snapcn/phone-frame (showDynamicIsland=false) */}
+      {/* Right Column (x: 1320..1868): Live Mobile $GOLD Hub inside @snapcn/phone-frame (showDynamicIsland=false) */}
       <div
         style={{
           position: "absolute",
@@ -935,7 +935,7 @@ function IntroWifFlywheelAndTap() {
           theme={ROBIN_THEME}
           mode="dark"
         >
-          {/* trimBefore=79 -> clip frame 144 (Stake 500 $wif -> Active 1.20x) hits on local 65 = global f677! */}
+          {/* trimBefore=79 -> clip frame 144 (Stake 500 $GOLD -> Active 1.20x) hits on local 65 = global f677! */}
           <OffthreadVideo
             src={staticFile("clips/clip-mobile-wif-hub.mp4")}
             trimBefore={79}
@@ -979,7 +979,7 @@ function IntroWifFlywheelAndTap() {
               color: PALETTE.bgCityStage,
             }}
           >
-            Stake 500 $wif
+            Stake 500 $GOLD
           </div>
         </AbsoluteFill>
       ) : null}
@@ -988,8 +988,8 @@ function IntroWifFlywheelAndTap() {
           (677 - 665) * 3.0 = 12 * 3.0 = 36.0 === CLICK_AT -> exact screen-tap on f677, settled by f693! */}
       <Sequence from={53} durationInFrames={35}>
         <ButtonPress
-          label="Stake 500 $wif"
-          pending="Chain 46631"
+          label="Stake 500 $GOLD"
+          pending="Harbor Vault"
           done="1.20x Active"
           width={320}
           speed={3.0}
@@ -998,7 +998,7 @@ function IntroWifFlywheelAndTap() {
         />
       </Sequence>
 
-      <Eyebrow n={3} title="$wif Economic Flywheel" />
+      <Eyebrow n={3} title="$GOLD Treasury Flywheel" />
     </SolaceGround>
   );
 }
@@ -1032,7 +1032,7 @@ function IntroOutroAndEndLockup() {
             background={PALETTE.bgDeep}
             glowColor={PALETTE.accentEmerald}
             statusColor={PALETTE.parchmentLight}
-            time="46631"
+            time="9:41"
           />
           <div
             style={{
@@ -1096,13 +1096,13 @@ function IntroOutroAndEndLockup() {
               <div
                 style={{
                   fontFamily: BUNGEE,
-                  fontSize: 108,
+                  fontSize: 96,
                   lineHeight: 1,
                   color: PALETTE.brandWordmarkGold,
                   letterSpacing: "0.03em",
                 }}
               >
-                ROBIN <span style={{ color: PALETTE.accentEmerald }}>TOWN</span>
+                HARBOR <span style={{ color: PALETTE.accentEmerald }}>TYCOON</span>
               </div>
             </div>
 
@@ -1114,8 +1114,8 @@ function IntroOutroAndEndLockup() {
                 color: C.ink,
               }}
             >
-              Bargain for corners, build in 3D, and put{" "}
-              <span style={{ color: PALETTE.accentGold }}>$wif</span> to work.
+              Bargain for corners, build shop chains, and grow{" "}
+              <span style={{ color: PALETTE.accentGold }}>$GOLD</span>.
             </div>
 
             <div
@@ -1140,7 +1140,7 @@ function IntroOutroAndEndLockup() {
                   color: PALETTE.parchmentLight,
                 }}
               >
-                robin-town-production.up.railway.app
+                harbor-tycoon-production.up.railway.app
               </div>
               <div
                 style={{
@@ -1154,7 +1154,7 @@ function IntroOutroAndEndLockup() {
                   color: PALETTE.accentMintPill,
                 }}
               >
-                10,000 $wif Ready · Chain ID 46631
+                10,000 $GOLD Ready · AI Merchant Engine
               </div>
             </div>
           </div>

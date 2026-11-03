@@ -10,7 +10,7 @@ const SEAT_LABELS = [
   "Seat 01 · 3D Harbor Diorama (390×844)",
   "Seat 02 · Two-Way OTC Bargain",
   "Seat 03 · 2D Pixel Street Map",
-  "Seat 04 · $wif Hub & WebSocket Room",
+  "Seat 04 · $GOLD Treasury & WebSocket Room",
 ] as const;
 
 /** S16 (300f / 5 bars): @snapcn/phone-stack rising with 4 captured 390x844 mobile & WebSocket seat screens. */
@@ -35,7 +35,7 @@ export function MultiSeatStack() {
         background={PALETTE.bgDeep}
         glowColor={PALETTE.accentEmerald}
         statusColor={PALETTE.parchmentLight}
-        time="46631"
+        time="9:41"
       />
       {/* Left/Right Context Rail so the centered 390x844 stack reads with crystal clarity */}
       <AbsoluteFill

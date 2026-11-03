@@ -100,7 +100,7 @@ export const MASTER_SHOTS = {
         to: 720,
         side: "below",
         what: "One-click 2D and 3D toggle",
-        why: "Switch views anytime without losing plots or $wif balances.",
+        why: "Switch views anytime without losing plots or $GOLD balances.",
         accent: PALETTE.accentGold,
       },
     ],
@@ -137,7 +137,7 @@ export const MASTER_SHOTS = {
         to: 360,
         side: "right",
         what: "Two-way OTC bargaining table",
-        why: "Trade $wif, deeds, and shop tiles in one swap.",
+        why: "Trade $GOLD, deeds, and shop tiles in one swap.",
         accent: PALETTE.accentGold,
       },
       {
@@ -178,20 +178,20 @@ export const MASTER_SHOTS = {
         from: 120,
         to: 420,
         side: "below",
-        what: "Compounding annual $wif payday",
-        why: "Connected storefronts pay higher $wif yields every single year.",
+        what: "Compounding annual $GOLD payday",
+        why: "Connected storefronts pay higher $GOLD yields every single year.",
         accent: PALETTE.accentGold,
       },
     ],
   } satisfies ShotSpec,
 
   // S12 (Bars 59..66 = 8 bars = 480f, Composition 3480..3960):
-  // Callout C6 (Chain 46631 + Verified $wif) -> HERO DROP 2 at 240f (Comp 3720) -> 1.20x Stake & Burn -> Callout C7
+  // Callout C6 ($GOLD Treasury & AI Rivals) -> HERO DROP 2 at 240f (Comp 3720) -> 1.20x Stake & Burn -> Callout C7
   S12: {
     id: "S12",
     clip: "clips/clip-04-wif-flywheel.mp4",
     trimBefore: f(E.clip04Start),
-    eyebrow: { n: 4, title: "$wif Flywheel" },
+    eyebrow: { n: 4, title: "$GOLD Treasury" },
     camera: [
       { at: 0, scale: 1.02, focus: { x: 960, y: 520 }, yaw: 0, panX: -255 },
       { at: 225, scale: 1.02, focus: { x: 960, y: 520 }, yaw: 0, panX: -255 },
@@ -212,8 +212,8 @@ export const MASTER_SHOTS = {
         from: 0,
         to: 240,
         side: "right",
-        what: "Verified $wif on Chain 46631",
-        why: "Start free immediately, then connect your Robinhood Chain wallet.",
+        what: "$GOLD Treasury and AI Rivals",
+        why: "Play free immediately against Cole, Maya, and Clara.",
         accent: PALETTE.accentEmerald,
       },
       {
@@ -222,14 +222,14 @@ export const MASTER_SHOTS = {
         to: 480,
         side: "right",
         what: "1.20x staking and permanent burns",
-        why: "Boost shop payouts while swaps and votes burn $wif.",
+        why: "Boost shop payouts while swaps and votes burn $GOLD.",
         accent: PALETTE.accentGold,
       },
     ],
   } satisfies ShotSpec,
 
   // S13b (Bars 69..74 = 6 bars = 360f, Composition 4080..4440):
-  // Year 6 Final $wif Standings & Ranked 4,000 $wif Purse Settlement
+  // Year 6 Final $GOLD Standings & Ranked 4,000 $GOLD Purse Settlement
   S13b: {
     id: "S13b",
     clip: "clips/clip-06-year6-standings.mp4",
@@ -245,12 +245,12 @@ export const MASTER_SHOTS = {
   } satisfies ShotSpec,
 
   // S15 (Bars 78..85 = 8 bars = 480f, Composition 4620..5100):
-  // Apple Carousel + SolaceUI shader -> ROBIN-POD Click Wheel Callout C8 -> Live WebSocket Room Lobby
+  // Apple Carousel + SolaceUI shader -> HARBOR-POD Click Wheel Callout C8 -> Live WebSocket Room Lobby
   S15: {
     id: "S15",
     clip: "clips/clip-05-gadgets-and-rooms.mp4",
     trimBefore: f(E.clip05Start),
-    eyebrow: { n: 5, title: "ROBIN-POD & Rooms" },
+    eyebrow: { n: 5, title: "HARBOR-POD & Rooms" },
     camera: [
       { at: 0, scale: 1.02, focus: { x: 960, y: 540 }, yaw: 10 },
       { at: 105, scale: 1.05, focus: { x: 960, y: 540 }, yaw: 8 },
@@ -271,7 +271,7 @@ export const MASTER_SHOTS = {
         from: 120,
         to: 420,
         side: "left",
-        what: "Collapsible ROBIN-POD click wheel",
+        what: "Collapsible HARBOR-POD click wheel",
         why: "Control Harbor lo-fi radio and game phases one-handed.",
         accent: PALETTE.accentMintPill,
       },
@@ -325,7 +325,7 @@ export const X_SHOTS = {
   } satisfies ShotSpec,
 
   // X06a (Bar 14 = 60f, Composition 780..840):
-  // HERO DROP DOWNBEAT at 0f (Comp 780): Collect $wif income ticks emerald & $wif banknotes fly!
+  // HERO DROP DOWNBEAT at 0f (Comp 780): Collect $GOLD income ticks emerald & $GOLD banknotes fly!
   X06Payday: {
     id: "X06Payday",
     clip: "clips/clip-03-payday-harvest.mp4",
@@ -339,7 +339,7 @@ export const X_SHOTS = {
   } satisfies ShotSpec,
 
   // X06c (Bars 16..18 = 3 bars = 180f, Composition 900..1080):
-  // Callout X2 (0..165f = 5.5s, 0 deg flat) over live Chain 46631 + 1.20x Staked + 1,534 $wif Burned
+  // Callout X2 (0..165f = 5.5s, 0 deg flat) over live $GOLD Treasury + 1.20x Staked + 1,534 $GOLD Burned
   X06Flywheel: {
     id: "X06Flywheel",
     clip: "clips/clip-04-wif-flywheel.mp4",
@@ -355,8 +355,8 @@ export const X_SHOTS = {
         from: 0,
         to: 165,
         side: "right",
-        what: "1.20x staking and $wif burns",
-        why: "Play free or compete live on Chain 46631.",
+        what: "1.20x staking and $GOLD burns",
+        why: "Play free vs AI rivals or compete in Ranked Arena.",
         accent: PALETTE.accentEmerald,
       },
     ],

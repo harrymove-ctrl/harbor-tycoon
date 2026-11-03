@@ -13,8 +13,8 @@ export function OpeningSwarm({ fast = false }: { fast?: boolean }) {
   // OrbSwarm expects 6 pipe-separated cards; we map the 4-beat story arc cleanly across the 6 slots
   // so every beat is <= 5 words and settles crisply on Be Vietnam Pro.
   const script = fast
-    ? "Pull up a stool. | Bargain for corners. | Open neighborhood shops. | Chain 46631 live. | Compound $wif yield. | Put $wif to work."
-    : "Pull up a stool. | Bargain street corners. | Open neighborhood shops. | Connect matching blocks. | Earn annual $wif. | Put $wif to work.";
+    ? "Pull up a stool. | Bargain for corners. | Open neighborhood shops. | AI Rivals live. | Compound $GOLD yield. | Put $GOLD to work."
+    : "Pull up a stool. | Bargain street corners. | Open neighborhood shops. | Connect matching blocks. | Earn annual $GOLD. | Put $GOLD to work.";
   return (
     <SolaceGround>
       <OrbSwarm
@@ -32,7 +32,7 @@ export function OpeningSwarm({ fast = false }: { fast?: boolean }) {
   );
 }
 
-/** S02 (120f) & X02 (60f): @snapcn/block-wordmark + TownMark SVG in Robin-Town district colors. */
+/** S02 (120f) & X02 (60f): @snapcn/block-wordmark + TownMark SVG in Harbor Tycoon district colors. */
 export function BrandBlockReveal({ fast = false }: { fast?: boolean }) {
   const frame = useCurrentFrame();
   const speed = fast ? 1.85 : 1.0;
@@ -45,9 +45,9 @@ export function BrandBlockReveal({ fast = false }: { fast?: boolean }) {
   return (
     <SolaceGround>
       <BlockWordmark
-        text="ROBIN TOWN"
+        text="HARBOR TYCOON"
         fontFamily={BUNGEE}
-        fontSize={132}
+        fontSize={96}
         color={PALETTE.brandWordmarkGold}
         colors={[...DISTRICT_PALETTE.slice(0, 6)]}
         background="transparent"
@@ -96,9 +96,9 @@ export function BrandBlockReveal({ fast = false }: { fast?: boolean }) {
             letterSpacing: "0.04em",
           }}
         >
-          <span>● ROBINHOOD CHAIN · 46631</span>
+          <span>● AI MERCHANT ENGINE · 3D HARBOR</span>
           <span style={{ color: PALETTE.accentGold }}>·</span>
-          <span style={{ color: PALETTE.parchmentWarm }}>BUILD WITH $WIF</span>
+          <span style={{ color: PALETTE.parchmentWarm }}>BUILD WITH $GOLD</span>
         </div>
       </AbsoluteFill>
     </SolaceGround>
@@ -115,7 +115,7 @@ export function LaptopBezelDive({ fast = false }: { fast?: boolean }) {
         entrance="open"
         finale="zoom-to-screen"
         showNotch={true}
-        notchLabel="Robinhood Chain 46631 · Year 1 Ready"
+        notchLabel="Harbor Tycoon · 3D Harbor & AI Rivals Ready"
         indicatorColor={PALETTE.accentEmerald}
         bezelColor={PALETTE.bgHudDark}
         screenColor={PALETTE.bgCityStage}

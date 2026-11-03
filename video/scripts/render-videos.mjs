@@ -50,7 +50,7 @@ for (const tgt of targets) {
     audioCodec: "aac",
     outputLocation: tgt.out,
     inputProps: { calloutMode: "normal" },
-    concurrency: 8,
+    concurrency: 3,
     ...browserOpts,
     onProgress: ({ progress }) => {
       const pct = Math.floor(progress * 10) * 10;

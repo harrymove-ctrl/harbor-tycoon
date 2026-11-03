@@ -31,7 +31,7 @@ const STOPS = [
   },
   {
     code: "02 · OTC BARGAIN",
-    sub: "$wif + tiles + deeds",
+    sub: "$GOLD + tiles + deeds",
     orbit: 1,
     angle: 145,
     at: 30,

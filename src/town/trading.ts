@@ -117,7 +117,7 @@ export function createTrading({
     side.cash > 0 || side.lots.length > 0 || side.tiles.some((n) => n > 0);
   const greetings = [
     'A spot next door? Pull up a stool, now we are talking!',
-    'Let us see what $wif and storefronts you brought to the table.',
+    'Let us see what $GOLD and storefronts you brought to the table.',
     'Have a seat by the street. Let us build a deal that works for both of us.',
   ] as const;
   function intro(): void {
@@ -125,7 +125,7 @@ export function createTrading({
   }
   function formatSideSummary(side: OfferSide): string {
     const parts: string[] = [];
-    if (side.cash > 0) parts.push(`${side.cash} $wif`);
+    if (side.cash > 0) parts.push(`${side.cash} $GOLD`);
     side.tiles.forEach((cnt, idx) => {
       if (cnt > 0) parts.push(`${cnt}× ${shopName(idx)}`);
     });
@@ -164,7 +164,7 @@ export function createTrading({
   function liveDealMeter(s: GameState, partnerName: string, busy: boolean): string {
     if (busy || isHumanPartner?.(draft.partner)) return '';
     if (!hasItems(draft.give) && !hasItems(draft.take)) {
-      return `<div class="deal-meter empty"><span>⚖️</span><span>Place $wif, shop pieces, or street plots on either side to see ${partnerName}'s live reaction.</span></div>`;
+      return `<div class="deal-meter empty"><span>⚖️</span><span>Place $GOLD, shop pieces, or street plots on either side to see ${partnerName}'s live reaction.</span></div>`;
     }
     try {
       const check = evaluateOffer(s, draft);
@@ -177,9 +177,9 @@ export function createTrading({
         ? `<button type="button" class="deal-meter-sweeten" data-bargain="accept-counter" title="${counter.summary}">🤝 ${counter.actionLabel}</button>`
         : '';
       if (check.shortfall > 0 && check.shortfall <= 30 && draft.give.cash + check.shortfall <= youCash) {
-        return `<div class="deal-meter close"><span>≈</span><span><strong>Almost there!</strong> ${counter ? counter.summary : `Add +${check.shortfall} $wif (or 1 piece) for ${partnerName} to accept.`}</span><button type="button" class="deal-meter-sweeten" data-bargain="sweeten" data-shortfall="${check.shortfall}">+${check.shortfall} $wif ✓</button>${counterBtn}<button type="button" class="deal-meter-clear" data-bargain="clear-mat">Clear</button></div>`;
+        return `<div class="deal-meter close"><span>≈</span><span><strong>Almost there!</strong> ${counter ? counter.summary : `Add +${check.shortfall} $GOLD (or 1 piece) for ${partnerName} to accept.`}</span><button type="button" class="deal-meter-sweeten" data-bargain="sweeten" data-shortfall="${check.shortfall}">+${check.shortfall} $GOLD ✓</button>${counterBtn}<button type="button" class="deal-meter-clear" data-bargain="clear-mat">Clear</button></div>`;
       }
-      return `<div class="deal-meter wide"><span>◔</span><span>${counter ? `<strong>${counter.summary}</strong>` : `Needs ~<strong>${check.shortfall} $wif</strong> more value (cash, tile, or adjacent plot) for ${partnerName}.`}</span>${counterBtn}<button type="button" class="deal-meter-clear" data-bargain="clear-mat">Clear</button></div>`;
+      return `<div class="deal-meter wide"><span>◔</span><span>${counter ? `<strong>${counter.summary}</strong>` : `Needs ~<strong>${check.shortfall} $GOLD</strong> more value (cash, tile, or adjacent plot) for ${partnerName}.`}</span>${counterBtn}<button type="button" class="deal-meter-clear" data-bargain="clear-mat">Clear</button></div>`;
     } catch {
       return '';
     }
@@ -195,9 +195,9 @@ export function createTrading({
     const s = getState(),
       p = playerAt(s, player),
       d = draft[side];
-    return `<section class="barter-side"><div class="barter-owner">${token(player)}<strong>${player === 0 ? 'You give' : p.name + ' gives'}</strong><small>${p.cash} $wif</small></div>
-      <div class="offer-tray" aria-label="Selected offer">${hasItems(d) ? `${d.cash ? `<span class="offer-chip cash-chip">${d.cash} $wif</span>` : ''}${d.tiles.map((n, i) => (n ? `<button data-bargain="remove" data-side="${side}" data-kind="tile" data-index="${i}" aria-label="Remove one ${shopName(i)}">${sprite('shops', shopSprite(i))}<b>×${n}</b><em>−</em></button>` : '')).join('')}${d.lots.map((id) => `<button data-bargain="asset" data-side="${side}" data-kind="lot" data-index="${id}" aria-label="Remove plot ${id + 1}"><span class="offer-address">${id + 1}</span><em>−</em></button>`).join('')}` : `<span class="empty-tray">Tap items below to place them on the mat</span>`}</div>
-      <div class="cash-stepper"><span>$wif</span><button data-bargain="cash" data-side="${side}" data-delta="-10" aria-label="Less $wif">−10</button><label><span class="sr-only">Cash offered ${side}</span><input data-bargain-cash="${side}" type="number" inputmode="numeric" min="0" max="${p.cash}" step="1" value="${d.cash}"> $wif</label><button data-bargain="cash" data-side="${side}" data-delta="10" aria-label="More $wif">+10</button></div>
+    return `<section class="barter-side"><div class="barter-owner">${token(player)}<strong>${player === 0 ? 'You give' : p.name + ' gives'}</strong><small>${p.cash} $GOLD</small></div>
+      <div class="offer-tray" aria-label="Selected offer">${hasItems(d) ? `${d.cash ? `<span class="offer-chip cash-chip">${d.cash} $GOLD</span>` : ''}${d.tiles.map((n, i) => (n ? `<button data-bargain="remove" data-side="${side}" data-kind="tile" data-index="${i}" aria-label="Remove one ${shopName(i)}">${sprite('shops', shopSprite(i))}<b>×${n}</b><em>−</em></button>` : '')).join('')}${d.lots.map((id) => `<button data-bargain="asset" data-side="${side}" data-kind="lot" data-index="${id}" aria-label="Remove plot ${id + 1}"><span class="offer-address">${id + 1}</span><em>−</em></button>`).join('')}` : `<span class="empty-tray">Tap items below to place them on the mat</span>`}</div>
+      <div class="cash-stepper"><span>$GOLD</span><button data-bargain="cash" data-side="${side}" data-delta="-10" aria-label="Less $GOLD">−10</button><label><span class="sr-only">Cash offered ${side}</span><input data-bargain-cash="${side}" type="number" inputmode="numeric" min="0" max="${p.cash}" step="1" value="${d.cash}"> $GOLD</label><button data-bargain="cash" data-side="${side}" data-delta="10" aria-label="More $GOLD">+10</button></div>
       <p class="stash-label">SHOP PIECES · TAP TO ADD</p><div class="barter-grid">${SHOPS.map((shop, i) => {
         const avail = (p.tiles[i] ?? 0) - (d.tiles[i] ?? 0);
         const fits = side === 'take' && (p.tiles[i] ?? 0) > 0 && tileFitsYou(s, i);
@@ -228,9 +228,9 @@ export function createTrading({
     <div class="bargain-dialogue ${status}" role="status" aria-live="polite"><span class="bargain-face" aria-hidden="true">${{ idle: '☺', thinking: '◔', rejected: 'ಠ', accepted: '♥' }[status]}</span><div><strong>${p.name}${busy ? ' · · ·' : ''}</strong><p>${message}</p></div>${done ? '<span class="deal-stamp">DEAL!</span>' : ''}</div>
     ${
       done
-        ? `<div class="deal-receipt"><strong>Deal sealed. Your plots, shop pieces, and $wif changed hands.</strong><p>${lastTax > 0 ? `1% OTC protocol fee (${lastTax} $wif) routed into the Robinhood Chain Staking Vault.` : 'Direct asset swap settled with zero cash fee.'}</p><button class="primary" data-bargain="again">Another deal</button><button class="secondary" data-action="close">Back to town</button></div>`
+        ? `<div class="deal-receipt"><strong>Deal sealed. Your plots, shop pieces, and $GOLD changed hands.</strong><p>${lastTax > 0 ? `1% OTC protocol fee (${lastTax} $GOLD) routed into the Harbor Staking Vault.` : 'Direct asset swap settled with zero cash fee.'}</p><button class="primary" data-bargain="again">Another deal</button><button class="secondary" data-action="close">Back to town</button></div>`
         : `${liveDealMeter(s, p.name, busy)}${rivalRiskBanner(s, busy)}<fieldset class="barter-table" ${busy ? 'disabled' : ''}><legend class="sr-only">Your two-sided trade offer</legend>${inventory(0, 'give')}<div class="barter-divider" aria-hidden="true">⇄</div>${inventory(p.id, 'take')}</fieldset>
-    <div class="barter-bottom"><span>Tap an item to add it. ★ marks tiles and plots that connect to your shops! (1% $wif cash fee feeds Staking Vault)</span>${status === 'rejected' && proposeBotCounterOffer(s, draft) ? `<button class="secondary" data-bargain="accept-counter">🤝 ${proposeBotCounterOffer(s, draft)!.actionLabel}</button>` : status === 'rejected' && shortfall > 0 && draft.give.cash + shortfall <= playerAt(s, 0).cash ? `<button class="secondary" data-bargain="counter">Add ${shortfall} $wif</button>` : ''}<button class="primary bargain-submit" data-bargain="propose" ${busy || (!hasItems(draft.give) && !hasItems(draft.take)) ? 'disabled' : ''}>${busy ? 'Counting the offer…' : 'How about this?'}</button></div>`
+    <div class="barter-bottom"><span>Tap an item to add it. ★ marks tiles and plots that connect to your shops! (1% $GOLD cash fee feeds Staking Vault)</span>${status === 'rejected' && proposeBotCounterOffer(s, draft) ? `<button class="secondary" data-bargain="accept-counter">🤝 ${proposeBotCounterOffer(s, draft)!.actionLabel}</button>` : status === 'rejected' && shortfall > 0 && draft.give.cash + shortfall <= playerAt(s, 0).cash ? `<button class="secondary" data-bargain="counter">Add ${shortfall} $GOLD</button>` : ''}<button class="primary bargain-submit" data-bargain="propose" ${busy || (!hasItems(draft.give) && !hasItems(draft.take)) ? 'disabled' : ''}>${busy ? 'Counting the offer…' : 'How about this?'}</button></div>`
     }`;
   }
   function render(): void {
@@ -247,7 +247,7 @@ export function createTrading({
     prefillShop: number | null = null,
   ): void {
     cancel();
-    modal('Let us make a deal.', '', 'ROBIN-TOWN BARGAINING TABLE');
+    modal('Let us make a deal.', '', 'HARBOR TYCOON BARGAINING TABLE');
     draft = makeDraft(getState(), partner, prefillLot, prefillShop);
     active = true;
     status = 'idle';
@@ -264,7 +264,7 @@ export function createTrading({
       return;
     }
     cancel();
-    modal('Let us make a deal.', '', 'ROBIN-TOWN BARGAINING TABLE');
+    modal('Let us make a deal.', '', 'HARBOR TYCOON BARGAINING TABLE');
     draft = JSON.parse(JSON.stringify(smart)) as TradeOffer;
     active = true;
     status = 'idle';
@@ -335,7 +335,7 @@ export function createTrading({
         }
       }
       status = 'thinking';
-      message = 'Hmm… let me count those plots and $wif.';
+      message = 'Hmm… let me count those plots and $GOLD.';
       speak('thinking', draft.partner);
       render();
       timer = setTimeout(() => {
@@ -354,7 +354,7 @@ export function createTrading({
             speak('positive', draft.partner);
           } else {
             status = 'rejected';
-            message = `Close! Add ${shortfall} $wif, or show me a different package.`;
+            message = `Close! Add ${shortfall} $GOLD, or show me a different package.`;
             playSound('reject');
             speak('negative', draft.partner);
           }
@@ -413,7 +413,7 @@ export function createTrading({
     if (draft[side].cash) {
       const chip = document.createElement('span');
       chip.className = 'offer-chip cash-chip';
-      chip.textContent = draft[side].cash + ' $wif';
+      chip.textContent = draft[side].cash + ' $GOLD';
       tray.prepend(chip);
     }
     if (hasItems(draft[side])) tray.querySelector('.empty-tray')?.remove();

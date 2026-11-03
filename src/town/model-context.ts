@@ -53,7 +53,7 @@ export function registerGameTools({
     register({
       name: 'get_neighborhood_state',
       description:
-        'Read the local Robin-Town game: phase, players, plots, shop tiles, and offered addresses.',
+        'Read the local Harbor Tycoon game: phase, players, plots, shop tiles, and offered addresses.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: true },
       execute: () => structuredClone(getState()),
@@ -102,7 +102,7 @@ export function registerGameTools({
     register({
       name: 'collect_neighborhood_income',
       description:
-        'Finish building, let computer neighbors build, and collect this year business income in $wif.',
+        'Finish building, let computer neighbors build, and collect this year business income in $GOLD.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: false },
       execute: () => {
@@ -158,7 +158,7 @@ export function registerGameTools({
     register({
       name: 'quote_neighborhood_trade',
       description:
-        'Ask a computer neighbor whether a proposed package of $wif, shop tiles, and plots would be accepted.',
+        'Ask a computer neighbor whether a proposed package of $GOLD, shop tiles, and plots would be accepted.',
       inputSchema: offerSchema,
       annotations: { readOnlyHint: true },
       execute: (input: TradeOffer) => evaluateOffer(getState(), input),
@@ -166,7 +166,7 @@ export function registerGameTools({
     register({
       name: 'propose_neighborhood_trade',
       description:
-        'Propose a package of $wif, shop tiles, and plots to a computer neighbor.',
+        'Propose a package of $GOLD, shop tiles, and plots to a computer neighbor.',
       inputSchema: offerSchema,
       annotations: { readOnlyHint: false },
       execute: (input: TradeOffer) => {

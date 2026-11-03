@@ -2,30 +2,30 @@
 
 export const PALETTE = {
   bgDeep: "#112a24", // src/styles/saigon/base.css:3
-  bgCityStage: "#0d2219", // src/styles/saigon/robin-enhancements.css:198
-  bgCityInner: "#233d32", // src/styles/saigon/robin-enhancements.css:457
-  bgHudDark: "#102a20", // src/styles/saigon/robin-enhancements.css:303
+  bgCityStage: "#0d2219", // src/styles/saigon/robin-enhancements.css:224
+  bgCityInner: "#233d32", // src/styles/saigon/robin-enhancements.css:876
+  bgHudDark: "#102a20", // src/styles/saigon/robin-enhancements.css:334
   bgFelt: "#163a30", // src/styles/saigon/base.css:2
-  bgShell: "#203f34", // src/styles/saigon/shell.css:36
-  accentEmerald: "#2ca56d", // src/styles/saigon/robin-enhancements.css:359
-  accentJade: "#39a883", // src/town/robin-town-ui.ts:99
-  accentMintPill: "#8bf5b5", // src/styles/saigon/robin-enhancements.css:43
-  accentGold: "#eec353", // src/styles/saigon/robin-enhancements.css:389
-  brandWordmarkGold: "#f1d191", // src/styles/saigon/shell.css:52
-  accentCoral: "#dc6f57", // src/town/robin-town-ui.ts:99
-  burnPillBg: "#3d1f1a", // src/styles/saigon/robin-enhancements.css:48
-  burnText: "#ffb899", // src/styles/saigon/robin-enhancements.css:49
-  parchmentLight: "#fbf6e8", // src/styles/saigon/robin-enhancements.css:800
-  parchmentWarm: "#f5eedb", // src/styles/saigon/robin-enhancements.css:777
+  bgShell: "#203f34", // src/styles/saigon/shell.css:40
+  accentEmerald: "#2ca56d", // src/styles/saigon/robin-enhancements.css:390
+  accentJade: "#39a883", // src/town/robin-town-ui.ts:162
+  accentMintPill: "#8bf5b5", // src/styles/saigon/robin-enhancements.css:60
+  accentGold: "#eec353", // src/styles/saigon/robin-enhancements.css:420
+  brandWordmarkGold: "#f1d191", // src/styles/saigon/shell.css:56
+  accentCoral: "#dc6f57", // src/town/robin-town-ui.ts:162
+  burnPillBg: "#3d1f1a", // src/styles/saigon/robin-enhancements.css:65
+  burnText: "#ffb899", // src/styles/saigon/robin-enhancements.css:66
+  parchmentLight: "#fbf6e8", // src/styles/saigon/robin-enhancements.css:1219
+  parchmentWarm: "#f5eedb", // src/styles/saigon/robin-enhancements.css:1196
   cream: "#f6e5b8", // src/styles/saigon/base.css:9
   paper: "#f0dfb2", // src/styles/saigon/base.css:5
   goldMuted: "#e3c078", // src/styles/saigon/base.css:4
   wood: "#6b452a", // src/styles/saigon/base.css:7
   orange: "#c66a39", // src/styles/saigon/base.css:8
   inkDark: "#3f3426", // src/styles/saigon/base.css:6
-  inkMuted: "#bdd8c8", // src/styles/saigon/robin-enhancements.css:344
-  borderBrass: "#cbb98e", // src/styles/saigon/robin-enhancements.css:778
-  borderEmerald: "#2f855a", // src/styles/saigon/robin-enhancements.css:44
+  inkMuted: "#bdd8c8", // src/styles/saigon/robin-enhancements.css:375
+  borderBrass: "#cbb98e", // src/styles/saigon/robin-enhancements.css:1197
+  borderEmerald: "#2f855a", // src/styles/saigon/robin-enhancements.css:61
 } as const;
 
 export const C = {
@@ -48,13 +48,13 @@ export const C = {
   dim: "#7fa392",
 } as const;
 
-// src/town/robin-town-ui.ts:90 DISTRICT_ACCENTS
+// src/town/robin-town-ui.ts:153 DISTRICT_ACCENTS
 export const DISTRICT_PALETTE = ["#39a883","#eec353","#29b6f6","#dc6f57","#a78bfa","#34d399","#7fb5cf"] as const;
 
-// src/town/robin-town-ui.ts:99 TOKEN_COLORS
+// src/town/robin-town-ui.ts:162 TOKEN_COLORS
 export const TOKEN_PALETTE = ["#39a883","#eec353","#dc6f57","#7fb5cf"] as const;
 
-// src/town/engine.ts:17 SHOPS
+// src/town/engine.ts:18 SHOPS
 export const SHOP_PALETTE = ["#825d43","#b7782c","#b85539","#a16586","#587c9a","#648454","#39a883","#eec353","#dc6f57","#7fb5cf","#ab47bc","#ec407a"] as const;
 
 // Authentic Saigon 2D/3D board accents verified in CSS/Three.js for qa-frames.py hue audit
@@ -62,24 +62,24 @@ export const BOARD_SOURCE_HUES = [
   "#4c9971", // src/styles/saigon/base.css:740
   "#b8da84", // src/styles/saigon/base.css:741
   "#ffdf83", // src/styles/saigon/base.css:760
-  "#cae6f4", // src/town/city-3d/robin-city-3d.ts:173
-  "#dfeef5", // src/town/city-3d/robin-city-3d.ts:174
-  "#fff8e6", // src/town/city-3d/robin-city-3d.ts:683
-  "#6c8566", // src/town/city-3d/robin-city-3d.ts:683
-  "#fff1cf", // src/town/city-3d/robin-city-3d.ts:689
-  "#d4edf2", // src/town/city-3d/robin-city-3d.ts:706
-  "#e89b6c", // src/town/city-3d/robin-city-3d.ts:718
-  "#e5986c", // src/town/city-3d/robin-city-3d.ts:720
-  "#ffb880", // src/town/city-3d/robin-city-3d.ts:724
-  "#52394c", // src/town/city-3d/robin-city-3d.ts:725
-  "#ff863b", // src/town/city-3d/robin-city-3d.ts:729
-  "#ffad70", // src/town/city-3d/robin-city-3d.ts:734
-  "#102036", // src/town/city-3d/robin-city-3d.ts:745
-  "#142640", // src/town/city-3d/robin-city-3d.ts:747
-  "#4469a6", // src/town/city-3d/robin-city-3d.ts:751
-  "#162336", // src/town/city-3d/robin-city-3d.ts:752
-  "#7fa8eb", // src/town/city-3d/robin-city-3d.ts:756
-  "#ffc16e", // src/town/city-3d/robin-city-3d.ts:761
+  "#cae6f4", // src/town/city-3d/robin-city-3d.ts:177
+  "#dfeef5", // src/town/city-3d/robin-city-3d.ts:178
+  "#fff8e6", // src/town/city-3d/robin-city-3d.ts:725
+  "#6c8566", // src/town/city-3d/robin-city-3d.ts:725
+  "#fff1cf", // src/town/city-3d/robin-city-3d.ts:731
+  "#d4edf2", // src/town/city-3d/robin-city-3d.ts:748
+  "#e89b6c", // src/town/city-3d/robin-city-3d.ts:760
+  "#e5986c", // src/town/city-3d/robin-city-3d.ts:762
+  "#ffb880", // src/town/city-3d/robin-city-3d.ts:766
+  "#52394c", // src/town/city-3d/robin-city-3d.ts:767
+  "#ff863b", // src/town/city-3d/robin-city-3d.ts:771
+  "#ffad70", // src/town/city-3d/robin-city-3d.ts:776
+  "#102036", // src/town/city-3d/robin-city-3d.ts:787
+  "#142640", // src/town/city-3d/robin-city-3d.ts:789
+  "#4469a6", // src/town/city-3d/robin-city-3d.ts:793
+  "#162336", // src/town/city-3d/robin-city-3d.ts:794
+  "#7fa8eb", // src/town/city-3d/robin-city-3d.ts:798
+  "#ffc16e", // src/town/city-3d/robin-city-3d.ts:803
   "#f2e4c4", // src/town/city-3d/neighborhood-world.ts:216
   "#ead29e", // src/town/city-3d/neighborhood-world.ts:216
   "#e3b89a", // src/town/city-3d/neighborhood-world.ts:216

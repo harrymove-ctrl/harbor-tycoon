@@ -2009,7 +2009,7 @@ export function mountRobinTown(): void {
           <div class="start-brand-hero">
             <h1 class="start-logo">HARBOR<span>TYCOON</span></h1>
             <div class="menu-shops" aria-hidden="true">${sprite('shops', 'banhmi')}${sprite('shops', 'coffee')}${sprite('shops', 'pho')}</div>
-            <p class="start-description">Bargain for corners, open shops, and grow $GOLD across 6 years.</p>
+            <p class="start-description">Bargain for corners, build shop chains, and grow $GOLD.</p>
           </div>
 
           <div class="start-command-col">
@@ -2094,10 +2094,10 @@ export function mountRobinTown(): void {
             <button data-action="retry-assets" hidden>Retry</button>
           </div>
           <div class="start-footer-links">
-            <p class="start-foot">Inspired by Chinatown · 2D + 3D Tabletop + Three.js 3D Living City</p>
+            <p class="start-foot">Inspired by Chinatown · 3D Harbor Diorama &amp; 2D Tabletop</p>
             <div class="start-foot-actions">
               ${progressActive ? `<button class="artbook-link" data-action="businesses">Shop ledger</button> · <button class="artbook-link" data-action="history">Town journal</button> · ` : ''}
-              <button class="artbook-link" data-action="research">Design notebook & Aseprite artbook</button> ·
+              <button class="artbook-link" data-action="research">Artbook</button> ·
               <a class="artbook-link" href="/changelog" target="_blank" rel="noopener">Changelog</a> ·
               <a class="artbook-link" href="/docs" target="_blank" rel="noopener">Docs</a> ·
               <a class="artbook-link" href="/changelog.xml" target="_blank" rel="noopener">RSS</a> ·
@@ -2529,7 +2529,7 @@ export function mountRobinTown(): void {
           <button type="button" class="secondary" data-action="wif-hub">💰 $GOLD Hub</button>
         </div>
         <div class="tx-verify-row" style="margin-top:8px">
-          <input id="verify-tx-hash-input" class="tx-hash-input" type="text" maxlength="66" placeholder="Paste Harbor Vault $GOLD tx hash (0x...)" value="${escape(lastMainnetTxHash ?? lastPastedTxHash)}" aria-label="Robinhood Harbor Vault $GOLD transaction hash" />
+          <input id="verify-tx-hash-input" class="tx-hash-input" type="text" maxlength="66" placeholder="Paste Harbor Vault $GOLD tx hash (0x...)" value="${escape(lastMainnetTxHash ?? lastPastedTxHash)}" aria-label="Harbor Vault $GOLD transaction hash" />
           <button type="button" class="secondary" data-action="verify-onchain-tx" ${txVerifyPending ? 'disabled' : ''}>${txVerifyPending ? '⏳ Checking…' : '⛓️ Verify Tx (+150 pts)'}</button>
         </div>
       </section>`;
@@ -3601,7 +3601,7 @@ export function mountRobinTown(): void {
                 walletStatsOffline = false;
                 if (verified.bonusTownPoints > 0) townPoints += verified.bonusTownPoints;
                 saveEconomy();
-                toast('🏛️ 1.20x On-Chain Patron Boost unlocked on Robinhood Harbor Vault!');
+                toast('🏛️ 1.20x On-Chain Patron Boost unlocked on Harbor Vault!');
                 if (get('#modal').dataset.wifHub === 'true') openWifHub();
                 render();
               })

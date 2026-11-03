@@ -725,7 +725,7 @@ function getCachedCrownEmblemTexture(): THREE.CanvasTexture | null {
   ctx.font = '900 42px "Trebuchet MS", "Arial Black", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('$wif', 96, 50);
+  ctx.fillText('$GOLD', 96, 50);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -1407,7 +1407,7 @@ function createCompleteCrown3D(
   upperCrest.position.y = 6.9;
   crownGroup.add(upperCrest);
 
-  // Center $wif golden prosperity medallion sign
+  // Center $GOLD golden prosperity medallion sign
   const emblemTex = getCachedCrownEmblemTexture();
   const glowMat = new THREE.MeshStandardMaterial({
     color: emblemTex ? '#ffffff' : '#ffe074',
@@ -2869,7 +2869,7 @@ export function createEnglishShop3D(
   // Shuttered rear courtyard windows + side gable transoms + secondary English shop nameplate
   addRearShophouseFacade(buildingGroup, safeShop, plinthTopY, windowGlowMat);
 
-  // Golden $wif Prosperity Rooftop Arch on Flagship lot, matching golden lantern finial on wing lots
+  // Golden $GOLD Prosperity Rooftop Arch on Flagship lot, matching golden lantern finial on wing lots
   if (completeFlag) {
     if (isClusterFlagship) {
       const { crownGroup, glowMat } = createCompleteCrown3D(roofPeakY);
@@ -3292,7 +3292,7 @@ export function animatePlotSlot3D(
     }
   }
 
-  // 3. Occupant animations: rising Noodles steam puffs, hanging lanterns, and $wif complete crown
+  // 3. Occupant animations: rising Noodles steam puffs, hanging lanterns, and $GOLD complete crown
   const animRefs = slot.occupantGroup.userData.animRefs as OccupantAnimRefs | undefined;
   if (!animRefs) {
     return;

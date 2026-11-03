@@ -41,3 +41,9 @@ master_one() {
 
 master_one "$VIDEO_DIR/out/master-raw.mp4" "$EXPORT_DIR/robin-town-hackathon-master.mp4" "189.50" "190.00" "200.00"
 master_one "$VIDEO_DIR/out/x-raw.mp4" "$EXPORT_DIR/robin-town-x-launch.mp4" "39.50" "40.00" "44.00"
+if [ -f "$VIDEO_DIR/out/intro-raw.mp4" ]; then
+  master_one "$VIDEO_DIR/out/intro-raw.mp4" "$EXPORT_DIR/robin-town-intro.mp4" "29.26" "29.76" "33.70"
+  cp "$EXPORT_DIR/robin-town-intro.mp4" "$EXPORT_DIR/harbor-tycoon-intro.mp4"
+fi
+cp "$EXPORT_DIR/robin-town-hackathon-master.mp4" "$EXPORT_DIR/harbor-tycoon-hackathon-master.mp4"
+cp "$EXPORT_DIR/robin-town-x-launch.mp4" "$EXPORT_DIR/harbor-tycoon-x-launch.mp4"

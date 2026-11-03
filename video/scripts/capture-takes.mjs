@@ -15,6 +15,7 @@ const RAW_DIR = path.join(VIDEO, "out/raw-recordings");
 const DATA_DIR = path.join(VIDEO, "src/datasets");
 const APP_URL = process.env.APP_URL || "http://127.0.0.1:5173/";
 const ONLY_HUB = process.argv.includes("--only-hub");
+const ONLY_CLIP02 = process.argv.includes("--only-clip02");
 
 mkdirSync(CLIPS_DIR, { recursive: true });
 mkdirSync(RAW_DIR, { recursive: true });
@@ -208,7 +209,7 @@ function makeSaveState(opts) {
     pending: opts.pending ?? [0, 1, 2, 12, 13],
     draftCount: opts.draftCount ?? 5,
     logs: [
-      "Year 1 opened on Robinhood Chain.",
+      "Year 1 opened in the 3D Harbor.",
       "Connected Coffee House chain completed in Sherwood.",
       "OTC swaps settled with 1% Staking Vault fee.",
     ],
@@ -346,14 +347,14 @@ const browser = await chromium.launch({
 
 const existingPath = path.join(DATA_DIR, "captured-boxes.json");
 const existingData =
-  ONLY_HUB && existsSync(existingPath)
+  (ONLY_HUB || ONLY_CLIP02) && existsSync(existingPath)
     ? JSON.parse(readFileSync(existingPath, "utf8"))
     : { boxes: {}, events: {}, realFlywheelStats: {} };
 
 const boxes = { ...existingData.boxes };
 const events = { ...existingData.events };
 
-if (!ONLY_HUB) {
+if (!ONLY_HUB && !ONLY_CLIP02) {
 // ── CLIP 01: 3D Harbor Diorama (Street -> Sunset -> Night -> Iso Day) + 1-Click 2D Toggle + Stool Draft (29.5s) ──
 await recordClip(
   browser,
@@ -366,7 +367,7 @@ await recordClip(
   },
   async (page, { elapsed, waitUntil }) => {
     await page.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
-    await page.click('#start-screen button[data-action="resume"]');
+    await clickVisible(page, '#start-screen button[data-action="resume"]');
     await page.waitForTimeout(350);
     await page.evaluate(() => document.querySelector('[data-action="dismiss-phase"]')?.click());
     await page.waitForTimeout(180);
@@ -417,7 +418,7 @@ await recordClip(
 
     await waitUntil(tReady + 14.0);
     events.clip01Toggle = elapsed();
-    await page.click('button[data-action="view-toggle"]');
+    await clickVisible(page, 'button[data-action="view-toggle"]');
     await page.waitForTimeout(350);
     // Switch explicitly to crisp 2D / tabletop-3d street map
     boxes.C2 = await boxOf(page, ".view-mode-segmented", boxes.C2);
@@ -440,7 +441,9 @@ await recordClip(
     await waitUntil(tReady + 29.0);
   },
 );
+}
 
+if (!ONLY_HUB) {
 // ── CLIP 02: Two-Way OTC Bargaining Table + 1% Vault Fee + 4-Tile Chain Build (29.5s) ──
 await recordClip(
   browser,
@@ -460,7 +463,7 @@ await recordClip(
   },
   async (page, { elapsed, waitUntil }) => {
     await page.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
-    await page.click('#start-screen button[data-action="resume"]');
+    await clickVisible(page, '#start-screen button[data-action="resume"]');
     await page.waitForTimeout(350);
     await page.evaluate(() => document.querySelector('[data-action="dismiss-phase"]')?.click());
     await page.waitForTimeout(300);
@@ -468,9 +471,9 @@ await recordClip(
     const tReady = elapsed();
     events.clip02Start = tReady;
 
-    // At +2.2s, open OTC Bargaining Table with Neighbor 1 (Linh)
+    // At +2.2s, open OTC Bargaining Table with Neighbor 1 (Cole)
     await waitUntil(tReady + 2.2);
-    await page.click('button[data-action="trade-player"][data-player="1"]');
+    await clickVisible(page, 'button[data-action="trade-player"][data-player="1"]');
     await page.waitForTimeout(350);
 
     // Build a generous two-way bundle so neighbor stamps DEAL! and 1% cash fee (2 $wif on 160 $wif) routes to Staking Vault:
@@ -566,7 +569,9 @@ await recordClip(
     await waitUntil(tReady + 29.0);
   },
 );
+}
 
+if (!ONLY_HUB && !ONLY_CLIP02) {
 // ── CLIP 03: Year-End $wif Payday Banknote Cascade + Calendar Tear + Shopkeeper Ledger (18.5s) ──
 await recordClip(
   browser,
@@ -584,7 +589,7 @@ await recordClip(
   },
   async (page, { elapsed, waitUntil }) => {
     await page.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
-    await page.click('#start-screen button[data-action="resume"]');
+    await clickVisible(page, '#start-screen button[data-action="resume"]');
     await page.waitForTimeout(350);
     await page.evaluate(() => document.querySelector('[data-action="dismiss-phase"]')?.click());
     await page.waitForTimeout(250);
@@ -650,6 +655,7 @@ let realFlywheelStats = existingData.realFlywheelStats || {
   walletAddress: "0x7F4C892B194D33E1A04F289012B59A7C4E1892A4",
   chainId: 46631,
 };
+if (!ONLY_CLIP02) {
 await recordClip(
   browser,
   "clip-04-wif-flywheel",
@@ -727,24 +733,22 @@ await recordClip(
     "robintown-atmo-3d-v1": "day",
   },
   async (page, { elapsed, waitUntil }) => {
-    await page.waitForSelector(".apple-carousel", { timeout: 8000 });
-    await page.evaluate(() => {
-      document.querySelector(".start-carousel-wrap")?.scrollIntoView({ behavior: "instant", block: "center" });
-    });
+    await page.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
     await page.waitForTimeout(250);
 
     const tReady = elapsed();
     events.clip05Start = tReady;
 
-    // Showcase Apple Carousel play/pause morph & progress tabs (Bars 78..79 = 4.0s)
-    await waitUntil(tReady + 1.2);
-    await clickVisible(page, ".apple-carousel-tab:nth-child(2)");
-    await waitUntil(tReady + 2.4);
-    await clickVisible(page, ".apple-carousel-play-button");
-    await waitUntil(tReady + 3.2);
-    await clickVisible(page, ".apple-carousel-play-button");
+    // Showcase What's New v1.5 & Zodiac Forecast tabs (Bars 78..79 = 4.0s)
+    await waitUntil(tReady + 0.9);
+    await clickVisible(page, 'button[data-action="whats-new"]');
+    await waitUntil(tReady + 2.1);
+    await clickVisible(page, 'button[data-action="whats-new-tab"][data-tab="zodiac"]');
+    await waitUntil(tReady + 3.4);
+    await clickVisible(page, '#modal button[data-action="close"]');
+    await page.waitForTimeout(150);
 
-    // Enter 3D City & pop open collapsible ROBIN-POD at +4.0s (Bar 80)
+    // Enter 3D City & pop open collapsible HARBOR-POD at +4.0s (Bar 80)
     await waitUntil(tReady + 3.9);
     await clickVisible(page, '#start-screen button[data-action="resume"]');
     await page.waitForTimeout(300);
@@ -796,8 +800,9 @@ await recordClip(
     if (peerCtx) await peerCtx.close().catch(() => {});
   },
 );
+}
 
-if (!ONLY_HUB) {
+if (!ONLY_HUB && !ONLY_CLIP02) {
 // ── CLIP 06: Year 6 Final $wif Standings & Ranked 4,000 $wif Purse Settlement (14.5s) ──
 await recordClip(
   browser,
@@ -827,13 +832,141 @@ await recordClip(
 
     await waitUntil(tReady + 1.4);
     await clickVisible(page, 'button[data-action="results"]');
+    await page.waitForTimeout(400);
+    boxes.I2 = await boxOf(page, "#modal .standings-list li:first-child, #modal .score-card-table tr:first-child", {
+      x: 594,
+      y: 332,
+      w: 731,
+      h: 72,
+    });
     await waitUntil(tReady + 13.5);
   },
 );
 }
 
-// ── 4 Responsive 390x844 Mobile Seat Captures for @snapcn/phone-stack (Scene S16) ──
+boxes.I1 = boxes.C1 || { x: 422, y: 297, w: 806, h: 435 };
+boxes.I2 = boxes.I2 || { x: 594, y: 332, w: 731, h: 72 };
+
+// ── 4 Responsive 390x844 Mobile Seat Captures + Mobile Video Takes for @snapcn/phone-stack & RaylightIntro ──
 async function captureMobileSeats() {
+  // 1. Desktop clean sunset screenshot for DispatchBannerStill
+  {
+    const dCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+    await dCtx.addInitScript(BASE_INIT_SCRIPT);
+    await dCtx.addInitScript((seed) => {
+      for (const [k, v] of Object.entries(seed)) {
+        localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
+      }
+    }, {
+      "robintown-save-v2": makeSaveState({ mode: "payday", year: 3, phase: "trade", cash0: 680 }),
+      "robintown-flywheel-v1": makeEconomy({ staked: 500, burned: 1534, vault: 682 }),
+      "robintown-view-mode-v1": "city-3d",
+      "robintown-atmo-3d-v1": "sunset",
+    });
+    const dp = await dCtx.newPage();
+    await dp.goto(APP_URL, { waitUntil: "networkidle" });
+    await dp.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
+    await clickVisible(dp, '#start-screen button[data-action="resume"]');
+    await dp.waitForTimeout(600);
+    await clickVisible(dp, '[data-action="dismiss-phase"]');
+    await dp.waitForTimeout(500);
+    await dp.screenshot({ path: path.join(CLIPS_DIR, "desktop-sunset-clean.png") });
+    await dCtx.close();
+  }
+
+  // 2. 2x Retina Mobile Street & Sunset Stills + clip-mobile-3d-fastplay.mp4 & clip-mobile-wif-hub.mp4
+  {
+    const dirFast = path.join(RAW_DIR, "clip-mobile-3d-fastplay");
+    rmSync(dirFast, { recursive: true, force: true });
+    mkdirSync(dirFast, { recursive: true });
+    const mCtx = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      recordVideo: { dir: dirFast, size: { width: 390, height: 844 } },
+    });
+    await mCtx.addInitScript(BASE_INIT_SCRIPT);
+    await mCtx.addInitScript((seed) => {
+      for (const [k, v] of Object.entries(seed)) {
+        localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
+      }
+    }, {
+      "robintown-save-v2": makeSaveState({ mode: "payday", year: 3, phase: "trade", cash0: 680 }),
+      "robintown-flywheel-v1": makeEconomy({ staked: 500, burned: 1534, vault: 682 }),
+      "robintown-view-mode-v1": "city-3d",
+      "robintown-atmo-3d-v1": "day",
+    });
+    const mp = await mCtx.newPage();
+    await mp.goto(APP_URL, { waitUntil: "networkidle" });
+    await mp.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
+    await clickVisible(mp, '#start-screen button[data-action="resume"]');
+    await mp.waitForTimeout(500);
+    await clickVisible(mp, '[data-action="dismiss-phase"]');
+    await mp.waitForTimeout(300);
+    await clickVisible(mp, 'button[data-action="set-3d-preset"][data-preset="street"]');
+    await mp.waitForTimeout(500);
+    await mp.screenshot({ path: path.join(CLIPS_DIR, "mobile-street-2x.png") });
+    await clickVisible(mp, 'button[data-action="set-3d-atmo"][data-atmo="sunset"]');
+    await mp.waitForTimeout(500);
+    await mp.screenshot({ path: path.join(CLIPS_DIR, "mobile-sunset-2x.png") });
+    await clickVisible(mp, 'button[data-action="set-3d-preset"][data-preset="isometric"]');
+    await clickVisible(mp, 'button[data-action="auto-play"]');
+    await mp.waitForTimeout(6000);
+    const vFast = mp.video();
+    await mCtx.close();
+    const fastWebm = await vFast.path();
+    execFileSync("ffmpeg", [
+      "-v", "error", "-y", "-i", fastWebm, "-r", "30",
+      "-vf", "scale=390:844:flags=lanczos", "-c:v", "libx264", "-crf", "16",
+      "-preset", "fast", "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart",
+      path.join(CLIPS_DIR, "clip-mobile-3d-fastplay.mp4"),
+    ]);
+  }
+
+  {
+    const dirHub = path.join(RAW_DIR, "clip-mobile-wif-hub");
+    rmSync(dirHub, { recursive: true, force: true });
+    mkdirSync(dirHub, { recursive: true });
+    const hCtx = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      recordVideo: { dir: dirHub, size: { width: 390, height: 844 } },
+    });
+    await hCtx.addInitScript(BASE_INIT_SCRIPT);
+    await hCtx.addInitScript((seed) => {
+      for (const [k, v] of Object.entries(seed)) {
+        localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
+      }
+    }, {
+      "robintown-save-v2": makeSaveState({ mode: "payday", year: 3, phase: "trade", cash0: 680 }),
+      "robintown-flywheel-v1": makeEconomy({ staked: 0, points: 400, burned: 1534, vault: 682 }),
+      "robintown-view-mode-v1": "city-3d",
+      "robintown-atmo-3d-v1": "day",
+    });
+    const hp = await hCtx.newPage();
+    await hp.goto(APP_URL, { waitUntil: "networkidle" });
+    await hp.waitForSelector('#start-screen button[data-action="resume"]:not([disabled])', { timeout: 8000 });
+    await clickVisible(hp, '#start-screen button[data-action="resume"]');
+    await hp.waitForTimeout(400);
+    await clickVisible(hp, '[data-action="dismiss-phase"]');
+    await clickVisible(hp, 'button[data-action="wif-hub"]');
+    await hp.waitForTimeout(2200);
+    await clickVisible(hp, 'button[data-action="toggle-stake"]');
+    await hp.waitForTimeout(3000);
+    const vHub = hp.video();
+    await hCtx.close();
+    const hubWebm = await vHub.path();
+    execFileSync("ffmpeg", [
+      "-v", "error", "-y", "-i", hubWebm, "-r", "30",
+      "-vf", "scale=390:844:flags=lanczos", "-c:v", "libx264", "-crf", "16",
+      "-preset", "fast", "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart",
+      path.join(CLIPS_DIR, "clip-mobile-wif-hub.mp4"),
+    ]);
+  }
+
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 1,
@@ -888,7 +1021,9 @@ async function captureMobileSeats() {
   console.log("Captured 4 crisp 390x844 mobile WebSocket seat PNGs for @snapcn/phone-stack");
 }
 
-await captureMobileSeats();
+if (!ONLY_CLIP02) {
+  await captureMobileSeats();
+}
 await browser.close();
 
 writeFileSync(

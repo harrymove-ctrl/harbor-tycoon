@@ -349,7 +349,7 @@ export function updateBoardLayout(state: GameState): boolean {
   if (state.lots.some((lot) => lot.owner !== null)) {
     log(
       state,
-      'The city map now has irregular blocks. Plot numbers, owners, shops, and $wif balances are preserved.',
+      'The city map now has irregular blocks. Plot numbers, owners, shops, and $GOLD balances are preserved.',
     );
   }
 
@@ -516,8 +516,8 @@ export function finishYear(state: GameState, isStaked = false): number[] {
     state.players[player].cash += state.lastIncome[player];
   }
 
-  const stakeTag = isStaked && state.lastIncome[0] > 0 ? ' (with 1.20x $wif Staking Boost)' : '';
-  log(state, `Year ${state.year} closed. You earned ${state.lastIncome[0]} $wif${stakeTag}.`);
+  const stakeTag = isStaked && state.lastIncome[0] > 0 ? ' (with 1.20x $GOLD Staking Boost)' : '';
+  log(state, `Year ${state.year} closed. You earned ${state.lastIncome[0]} $GOLD${stakeTag}.`);
   state.phase = state.year === 6 ? 'ended' : 'income';
   return state.lastIncome;
 }
@@ -607,7 +607,7 @@ export function validateOffer(state: GameState, offer: TradeOffer): boolean {
       (side) => side.cash || side.lots.length || side.tiles.some(Boolean),
     )
   ) {
-    throw Error('Add $wif cash, a shop tile, or a plot to the deal.');
+    throw Error('Add $GOLD cash, a shop tile, or a plot to the deal.');
   }
   return true;
 }
@@ -649,10 +649,10 @@ export function trade(state: GameState, offer: TradeOffer): TradeEvaluation {
     offer.give.tiles.reduce((total, count) => total + count, 0) +
     offer.take.tiles.reduce((total, count) => total + count, 0);
   const totalTax = giveTax.taxAmount + takeTax.taxAmount;
-  const taxNote = totalTax > 0 ? ` (${totalTax} $wif routed to Vault)` : '';
+  const taxNote = totalTax > 0 ? ` (${totalTax} $GOLD routed to Vault)` : '';
   log(
     state,
-    `Deal ${state.trades}: you and ${partner.name} traded ${plots} plots, ${tiles} tiles, and $wif${taxNote}.`,
+    `Deal ${state.trades}: you and ${partner.name} traded ${plots} plots, ${tiles} tiles, and $GOLD${taxNote}.`,
   );
   return { ...result, taxAmount: totalTax };
 }
@@ -695,14 +695,14 @@ export function proposeBotCounterOffer(
         if (evaluateOffer(state, candidate).accepted) {
           return {
             counterOffer: candidate,
-            summary: `${partner.name} counters: Add 1× ${SHOPS[s].name} + ${recheck.shortfall} $wif and we shake hands!`,
+            summary: `${partner.name} counters: Add 1× ${SHOPS[s].name} + ${recheck.shortfall} $GOLD and we shake hands!`,
             actionLabel: `Load Counter ✓`,
           };
         }
       }
     }
 
-    // 2. Check if adding affordable $wif cash closes the shortfall
+    // 2. Check if adding affordable $GOLD cash closes the shortfall
     if (check.shortfall <= 65 && offer.give.cash + check.shortfall <= you.cash) {
       const candidate: TradeOffer = JSON.parse(JSON.stringify(offer)) as TradeOffer;
       candidate.give.cash += check.shortfall;
@@ -713,21 +713,21 @@ export function proposeBotCounterOffer(
         const delta = candidate.give.cash - offer.give.cash;
         return {
           counterOffer: candidate,
-          summary: `${partner.name} counters: Top up +${delta} $wif (${candidate.give.cash} $wif total) and it is yours!`,
-          actionLabel: `+${delta} $wif Counter ✓`,
+          summary: `${partner.name} counters: Top up +${delta} $GOLD (${candidate.give.cash} $GOLD total) and it is yours!`,
+          actionLabel: `+${delta} $GOLD Counter ✓`,
         };
       }
     }
 
-    // 3. Check if trimming $wif requested from the neighbor closes the gap
+    // 3. Check if trimming $GOLD requested from the neighbor closes the gap
     if (offer.take.cash > 0 && offer.take.cash >= check.shortfall) {
       const candidate: TradeOffer = JSON.parse(JSON.stringify(offer)) as TradeOffer;
       candidate.take.cash = Math.max(0, offer.take.cash - check.shortfall);
       if (evaluateOffer(state, candidate).accepted) {
         return {
           counterOffer: candidate,
-          summary: `${partner.name} counters: Lower your cash request to ${candidate.take.cash} $wif and we have a deal!`,
-          actionLabel: `Ask ${candidate.take.cash} $wif ✓`,
+          summary: `${partner.name} counters: Lower your cash request to ${candidate.take.cash} $GOLD and we have a deal!`,
+          actionLabel: `Ask ${candidate.take.cash} $GOLD ✓`,
         };
       }
     }
@@ -755,7 +755,7 @@ export function detectRivalMonopolyRisk(state: GameState, offer: TradeOffer): st
       partnerLargestGroup + giving >= targetSize ||
       partnerLargestGroup + (partner.tiles[s] ?? 0) + giving >= targetSize
     ) {
-      return `Monopoly Alert: Giving ${giving}× ${SHOPS[s].name} helps ${partner.name} complete a ${targetSize}/${targetSize} ${SHOPS[s].english} chain (${COMPLETE[targetSize]} $wif/yr)!`;
+      return `Monopoly Alert: Giving ${giving}× ${SHOPS[s].name} helps ${partner.name} complete a ${targetSize}/${targetSize} ${SHOPS[s].english} chain (${COMPLETE[targetSize]} $GOLD/yr)!`;
     }
   }
 
@@ -769,7 +769,7 @@ export function detectRivalMonopolyRisk(state: GameState, offer: TradeOffer): st
       partnerInDistrict < DISTRICT_MAJORITY_THRESHOLD &&
       partnerInDistrict + givenInDistrict >= DISTRICT_MAJORITY_THRESHOLD
     ) {
-      return `Guild Seal Alert: Plot #${lotId + 1} hands ${partner.name} the ${DISTRICTS[districtIdx]} Majority Seal (+${DISTRICT_MAJORITY_BONUS} $wif/yr)!`;
+      return `Guild Seal Alert: Plot #${lotId + 1} hands ${partner.name} the ${DISTRICTS[districtIdx]} Majority Seal (+${DISTRICT_MAJORITY_BONUS} $GOLD/yr)!`;
     }
     const adjOwned = neighbors(lotId).filter((n) => state.lots[n]?.owner === offer.partner).length;
     if (adjOwned >= 2) {
@@ -879,9 +879,9 @@ export function botTradeRound(state: GameState): {
 
       const cashPart =
         bestSwap.cashFromA > 0
-          ? ` (+${bestSwap.cashFromA} $wif)`
+          ? ` (+${bestSwap.cashFromA} $GOLD)`
           : bestSwap.cashFromB > 0
-            ? ` (+${bestSwap.cashFromB} $wif)`
+            ? ` (+${bestSwap.cashFromB} $GOLD)`
             : '';
       const summary = `${playerA.name} and ${playerB.name} swapped ${SHOPS[bestSwap.shopFromA].name} for ${SHOPS[bestSwap.shopFromB].name}${cashPart}`;
       log(state, `Deal ${state.trades}: ${summary}.`);
@@ -1098,7 +1098,7 @@ export function executeAcceptedPlayerTrade(
     throw Error('Invalid trading seats.');
   }
   if (give.cash < 0 || give.cash > pFrom.cash || take.cash < 0 || take.cash > pTo.cash) {
-    throw Error('Insufficient $wif cash for trade.');
+    throw Error('Insufficient $GOLD cash for trade.');
   }
   for (let s = 0; s < 6; s++) {
     if ((give.tiles[s] || 0) > pFrom.tiles[s] || (take.tiles[s] || 0) > pTo.tiles[s]) {

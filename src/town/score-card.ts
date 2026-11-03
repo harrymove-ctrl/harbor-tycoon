@@ -82,14 +82,14 @@ export function renderEmpireScoreCardDataUrl(payload: ScoreCardPayload): string 
 
   ctx.fillStyle = '#8bf5b5';
   ctx.font = '800 14px system-ui, -apple-system, sans-serif';
-  ctx.fillText('● ROBIN TOWN · ROBINHOOD CHAIN (4663) · $WIF', 88, 85);
+  ctx.fillText('● HARBOR TYCOON · ROBINHOOD CHAIN (4663) · $GOLD', 88, 85);
 
   // Mode Badge on Top Right
   const modeLabel =
     state.entryMode === 'daily'
       ? `DAILY HARBOR SEED #${state.dailySeed || 'TODAY'}`
       : state.entryMode === 'ranked'
-        ? 'RANKED 4,000 $WIF ARENA'
+        ? 'RANKED 4,000 $GOLD ARENA'
         : 'CASUAL HARBOR MATCH';
   const modeW = Math.max(260, ctx.measureText(modeLabel).width + 44);
   drawRoundedRect(ctx, 1132 - modeW, 62, modeW, 36, 18);
@@ -133,7 +133,7 @@ export function renderEmpireScoreCardDataUrl(payload: ScoreCardPayload): string 
   ctx.fillStyle = '#c8dfd1';
   ctx.font = '600 21px system-ui, -apple-system, sans-serif';
   ctx.fillText(
-    `Six Zodiac Years of Street Negotiation, 3D Shophouses & On-Chain $wif Yield`,
+    `Six Zodiac Years of Street Negotiation, 3D Shophouses & On-Chain $GOLD Yield`,
     68,
     204,
   );
@@ -152,12 +152,12 @@ export function renderEmpireScoreCardDataUrl(payload: ScoreCardPayload): string 
 
   ctx.fillStyle = '#eec353';
   ctx.font = '900 74px system-ui, -apple-system, sans-serif';
-  ctx.fillText(`${myCash.toLocaleString('en-US')} $wif`, 96, 355);
+  ctx.fillText(`${myCash.toLocaleString('en-US')} $GOLD`, 96, 355);
 
   ctx.fillStyle = '#8bf5b5';
   ctx.font = '700 20px system-ui, -apple-system, sans-serif';
   ctx.fillText(
-    `+${yr6Yield.toLocaleString('en-US')} $wif/yr store yield${stakedBoost ? ' · 1.20x Boost Active' : ''}`,
+    `+${yr6Yield.toLocaleString('en-US')} $GOLD/yr store yield${stakedBoost ? ' · 1.20x Boost Active' : ''}`,
     96,
     404,
   );
@@ -201,7 +201,7 @@ export function renderEmpireScoreCardDataUrl(payload: ScoreCardPayload): string 
   ctx.fillStyle = '#ffea9f';
   ctx.font = '700 17px system-ui, -apple-system, sans-serif';
   const tableLine = ranked
-    .map((p, i) => `#${i + 1} ${p.id === 0 ? 'You' : p.name}: ${p.cash} $wif`)
+    .map((p, i) => `#${i + 1} ${p.id === 0 ? 'You' : p.name}: ${p.cash} $GOLD`)
     .join('    ·    ');
   ctx.fillText(tableLine, 92, 499);
 
@@ -212,7 +212,7 @@ export function renderEmpireScoreCardDataUrl(payload: ScoreCardPayload): string 
       : 'Guest Simulation Trader';
   const badgeParts = [
     verifiedWallet ? `✓ Verified ${shortWallet}` : `Wallet: ${shortWallet}`,
-    verifiedTxCount ? `${verifiedTxCount} On-Chain $wif Tx` : null,
+    verifiedTxCount ? `${verifiedTxCount} On-Chain $GOLD Tx` : null,
     streakDays && streakDays > 1 ? `${streakDays}-Day Harbor Streak` : null,
     dailyRank ? `Daily Seed Rank #${dailyRank}` : null,
   ].filter(Boolean);

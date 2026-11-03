@@ -11,7 +11,7 @@ const SIM_ADDRESSES = [
 ];
 
 /**
- * Maps the live Robin-Town (saigon-town) GameState into the schema expected by ThreeBoardRenderer
+ * Maps the live Harbor Tycoon (saigon-town) GameState into the schema expected by ThreeBoardRenderer
  * so switching to 3D City Mode renders all 72 parcels, owners, built shops, and golden completion halos.
  */
 export function toEngine3DState(state: TownGameState): Engine3DGameState {

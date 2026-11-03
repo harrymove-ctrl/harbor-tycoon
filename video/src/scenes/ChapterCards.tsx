@@ -134,7 +134,7 @@ export function ChapterFlywheelCard() {
       >
         <TextHighlight
           before="Stake, compete, and "
-          highlight="burn $wif."
+          highlight="burn $GOLD."
           after=""
           preset="underline"
           baseColor={PALETTE.parchmentLight}
@@ -159,7 +159,7 @@ export function ChapterCraftCheckCycle() {
     <SolaceGround>
       <CheckCycle
         headline="Built with"
-        words="ROBIN-POD Wheel, Apple Carousel, SolaceUI Shader, WebSocket Rooms, Chain ID 46631"
+        words="HARBOR-POD Wheel, Apple Carousel, SolaceUI Shader, WebSocket Rooms, AI Merchant Engine"
         fontFamily={BE_VIETNAM}
         theme={{
           ...ROBIN_THEME,

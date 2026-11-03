@@ -19,7 +19,7 @@ const HERO_PILLS = [
     text: PALETTE.parchmentLight,
   },
   {
-    label: "World is Flat ($wif)",
+    label: "Harbor Treasury ($GOLD)",
     dot: PALETTE.accentGold,
     border: PALETTE.accentGold,
     text: PALETTE.accentGold,
@@ -79,19 +79,19 @@ export function DispatchBannerStill() {
             </div>
           </div>
 
-          {/* Main Display Wordmark: ROBIN TOWN v1.0 in Bungee #fbf6e8 */}
+          {/* Main Display Wordmark: HARBOR TYCOON v1.5 in Bungee #fbf6e8 */}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div
               style={{
                 fontFamily: BUNGEE,
                 fontVariantNumeric: "tabular-nums",
-                fontSize: 66,
+                fontSize: 60,
                 lineHeight: 1.02,
                 color: PALETTE.parchmentLight,
                 letterSpacing: "0.02em",
               }}
             >
-              ROBIN TOWN
+              HARBOR TYCOON
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <span
@@ -104,7 +104,7 @@ export function DispatchBannerStill() {
                   letterSpacing: "0.03em",
                 }}
               >
-                v1.0
+                v1.5
               </span>
               <span
                 style={{
@@ -137,8 +137,8 @@ export function DispatchBannerStill() {
               opacity: 0.94,
             }}
           >
-            3D Harbor Board Game · OTC Bargaining · Official{" "}
-            <span style={{ color: PALETTE.accentGold, fontWeight: 700 }}>$wif (4663)</span>
+            3D Harbor Board Game · AI Rivals ·{" "}
+            <span style={{ color: PALETTE.accentGold, fontWeight: 700 }}>$GOLD Treasury</span>
           </div>
 
           {/* 3 Emerald / Gold Feature Pills */}
@@ -201,7 +201,7 @@ export function DispatchBannerStill() {
             }}
           >
             <span style={{ color: PALETTE.parchmentLight }}>
-              robin-town-production.up.railway.app
+              harbor-tycoon-production.up.railway.app
             </span>
             <span style={{ color: PALETTE.accentGold }}>·</span>
             <span>926 Tests Passed</span>

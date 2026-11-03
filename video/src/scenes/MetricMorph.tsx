@@ -18,21 +18,21 @@ const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const BARS = [
   {
     pct: "90%",
-    amount: "3,600 $wif",
+    amount: "3,600 $GOLD",
     label: "Podium Purse (1st 60% · 2nd 25% · 3rd 15%)",
     fill: 0.9,
     color: PALETTE.accentEmerald,
   },
   {
     pct: "5%",
-    amount: "200 $wif",
+    amount: "200 $GOLD",
     label: "Permanently Burned to 0x0000...dEaD",
     fill: 0.34,
     color: PALETTE.accentCoral,
   },
   {
     pct: "5%",
-    amount: "200 $wif",
+    amount: "200 $GOLD",
     label: "Staking Vault (Funds 1.20x Shopkeeper Boost)",
     fill: 0.34,
     color: PALETTE.accentGold,
@@ -81,7 +81,7 @@ export function MetricMorph({ fast = false }: { fast?: boolean }) {
               boxShadow: "0 24px 64px rgba(8, 22, 16, 0.75)",
             }}
           >
-            Ranked Arena · <span style={{ color: PALETTE.accentGold }}>4,000 $wif Pool</span>
+            Ranked Arena · <span style={{ color: PALETTE.accentGold }}>4,000 $GOLD Pool</span>
           </div>
         </AbsoluteFill>
       ) : null}
@@ -126,7 +126,7 @@ export function MetricMorph({ fast = false }: { fast?: boolean }) {
                     letterSpacing: "0.12em",
                   }}
                 >
-                  RANKED ARENA CONSERVATION · VERIFIED $WIF 0xE49A1C…0F9B
+                  RANKED ARENA CONSERVATION · HARBOR TREASURY ($GOLD)
                 </div>
                 <div
                   style={{
@@ -137,7 +137,7 @@ export function MetricMorph({ fast = false }: { fast?: boolean }) {
                     color: C.ink,
                   }}
                 >
-                  Zero inflation. Every single $wif accounted for.
+                  Zero inflation. Every single $GOLD accounted for.
                 </div>
               </div>
               <div
@@ -148,7 +148,7 @@ export function MetricMorph({ fast = false }: { fast?: boolean }) {
                   color: PALETTE.accentGold,
                 }}
               >
-                Σ = 4,000 $wif
+                Σ = 4,000 $GOLD
               </div>
             </div>
 
@@ -216,9 +216,9 @@ export function MetricMorph({ fast = false }: { fast?: boolean }) {
               }}
             >
               {[
-                { tag: "ON-CHAIN 0x…dEaD PROOF", text: "4,600,000+ $wif Burned on Robinhood Chain", c: PALETTE.burnText },
+                { tag: "TREASURY BURN PROOF", text: "116,805+ $GOLD Burned in Harbor Treasury", c: PALETTE.burnText },
                 { tag: "OTC CASH MICRO-TAX", text: "1% Fee Routed to Staking Vault", c: PALETTE.accentGold },
-                { tag: "CASUAL & GOVERNANCE", text: "3% Point Swap + 100 $wif Vote Burns", c: PALETTE.accentMintPill },
+                { tag: "CASUAL & GOVERNANCE", text: "3% Point Swap + 100 $GOLD Vote Burns", c: PALETTE.accentMintPill },
               ].map((pill) => (
                 <div
                   key={pill.tag}
